@@ -98,7 +98,18 @@ export async function generateOneVideo() {
       painting = candidate;
       break;
     } catch (err) {
-      console.warn(`[generate-video] "${candidate.title}" 대본 생성 실패, 다른 그림으로 넘어갑니다: ${err.message}`);
+      if (err.code !== 'CONTENT_REFUSAL') {
+        // 이 그림 자체의 문제가 아니라 API 과금/네트워크/인증 등 시스템 차원의 문제입니다
+        // (예: "credit balance too low"). 이런 경우 이 그림을 영구히 제외 목록에 넣는 건
+        // 억울하므로 블랙리스트에 올리지 않고, 다른 그림으로도 재시도하지 않은 채 바로
+        // 에러를 던져서 위(배치 스크립트 등) 호출자가 문제를 알아채게 합니다.
+        console.error(`[generate-video] "${candidate.title}" 대본 생성 중 그림과 무관한 오류 발생 — 이 그림은 블랙리스트에 넣지 않고 바로 중단합니다: ${err.message}`);
+        fs.rmSync(imagePath, { force: true });
+        fs.rmSync(visionPath, { force: true });
+        fs.rmSync(workDir, { recursive: true, force: true });
+        throw err;
+      }
+      console.warn(`[generate-video] "${candidate.title}" 대본 생성 실패(민감한 소재로 추정), 다른 그림으로 넘어갑니다: ${err.message}`);
       usedList.push({
         objectID: candidate.objectID,
         title: candidate.title,
@@ -114,7 +125,10 @@ export async function generateOneVideo() {
   }
 
   if (!painting) {
-    throw new Error(`${MAX_PAINTING_ATTEMPTS}개 그림을 시도했지만 모두 대본 생성에 실패했습니다.`);
+    throw Object.assign(
+      new Error(`${MAX_PAINTING_ATTEMPTS}개 그림을 시도했지만 모두 민감한 소재로 추정되어 대본 생성에 실패했습니다.`),
+      { code: 'CONTENT_REFUSAL' }
+    );
   }
 
   console.log(`[generate-video] 대본 완성 — 세그먼트 ${script.segments.length}개, 제목: "${script.youtube.title}"`);

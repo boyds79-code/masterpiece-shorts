@@ -192,7 +192,11 @@ You must respond by calling the "submit_script" tool exactly once.`;
 // 죽는 것보다 여기서 미리 방어하는 게 낫습니다.)
 function validateAndClampScript(script) {
   if (!Array.isArray(script.segments) || script.segments.length === 0) {
-    throw new Error('Claude가 segments를 비워서 반환했습니다.');
+    // 이건 "이 그림 자체가 문제"인 경우입니다 (예: 누드가 포함된 종교화/신화화 등 민감한
+    // 소재라 Claude가 조심스러워져서 빈 응답을 준 경우) — generate-video.mjs가 이 코드를
+    // 보고 "이 그림만 건너뛰고 다른 그림으로 재시도"할지, 아니면 과금/네트워크 등 그림과
+    // 무관한 문제라 재시도 없이 바로 실패시킬지를 구분합니다.
+    throw Object.assign(new Error('Claude가 segments를 비워서 반환했습니다.'), { code: 'CONTENT_REFUSAL' });
   }
   for (const seg of script.segments) {
     seg.bbox = clampBbox(seg.bbox);

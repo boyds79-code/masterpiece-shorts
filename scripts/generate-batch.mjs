@@ -42,6 +42,17 @@ async function main() {
     } catch (err) {
       console.error(`[generate-batch] [${i}/${COUNT}] 실패: ${err.message}`);
       failed.push({ index: i, reason: err.message });
+
+      if (err.code !== 'CONTENT_REFUSAL') {
+        // 특정 그림의 민감한 소재 때문이 아니라 API 과금/네트워크/인증 등 시스템 차원의
+        // 문제입니다. 이런 문제는 다음 그림으로 넘어가도 똑같이 반복될 뿐이니, 나머지
+        // 배치를 계속 돌려서 시간과 API 호출만 낭비하지 말고 여기서 바로 멈춥니다.
+        console.error(
+          `\n[generate-batch] 그림과 무관한 시스템 오류로 보여 나머지 ${COUNT - i}개는 시도하지 않고 배치를 중단합니다.\n` +
+            '문제를 해결한 뒤(예: Anthropic 콘솔에서 크레딧 충전) 다시 실행해주세요.\n'
+        );
+        break;
+      }
     }
   }
 
