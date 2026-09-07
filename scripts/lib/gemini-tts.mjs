@@ -34,13 +34,34 @@ function parseRetryDelaySeconds(errText) {
 const MAX_RETRIES = 5;
 const DEFAULT_RETRY_DELAY_SEC = 65;
 
+// 503(UNAVAILABLE)/500/502/504처럼 "서버가 지금 잠깐 불안정한" 상태는 보통 몇 초~몇십
+// 초 안에 스스로 풀립니다. 예전엔 이걸 바로 실패로 던졌는데, 그러면 generate-batch.mjs가
+// "그림과 무관한 시스템 오류"로 판단해서 남은 영상 전체를 포기해버립니다 — 실제로는
+// 잠깐 기다렸다 한 번 더 시도하면 되는 경우가 대부분이라 429처럼 재시도합니다.
+const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
+const TRANSIENT_RETRY_DELAY_SEC = 15;
+
 async function callGeminiTts({ url, body }) {
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (networkErr) {
+      // fetch 자체가 던지는 네트워크 에러(DNS 실패, 연결 끊김 등)도 5xx와 같은 취급으로
+      // 재시도합니다 — 배치 도중 와이파이가 잠깐 끊기는 정도로 전체를 포기하지 않도록.
+      if (attempt < MAX_RETRIES) {
+        console.log(
+          `[gemini-tts]   ⏳ 네트워크 오류(${networkErr.message}). ${TRANSIENT_RETRY_DELAY_SEC}초 대기 후 재시도합니다 (${attempt}/${MAX_RETRIES})...`
+        );
+        await sleep(TRANSIENT_RETRY_DELAY_SEC * 1000);
+        continue;
+      }
+      throw networkErr;
+    }
 
     if (res.ok) return res.json();
 
@@ -66,9 +87,17 @@ async function callGeminiTts({ url, body }) {
       continue;
     }
 
+    if (TRANSIENT_STATUS_CODES.has(res.status) && attempt < MAX_RETRIES) {
+      console.log(
+        `[gemini-tts]   ⏳ Gemini 서버 일시 오류(${res.status}). ${TRANSIENT_RETRY_DELAY_SEC}초 대기 후 재시도합니다 (${attempt}/${MAX_RETRIES})...`
+      );
+      await sleep(TRANSIENT_RETRY_DELAY_SEC * 1000);
+      continue;
+    }
+
     throw new Error(`Gemini TTS 호출 실패 (${res.status}): ${errText}`);
   }
-  throw new Error('Gemini TTS 호출이 재시도 한도를 넘어 계속 실패했습니다 (429).');
+  throw new Error('Gemini TTS 호출이 재시도 한도를 넘어 계속 실패했습니다.');
 }
 
 /**

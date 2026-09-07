@@ -133,76 +133,88 @@ export async function generateOneVideo() {
 
   console.log(`[generate-video] 대본 완성 — 세그먼트 ${script.segments.length}개, 제목: "${script.youtube.title}"`);
 
-  console.log('[generate-video] 각 세그먼트 나레이션 오디오 생성 중 (Gemini TTS)...');
-  for (let i = 0; i < script.segments.length; i++) {
-    const seg = script.segments[i];
-    const audioPath = path.join(workDir, `seg-${i}-audio.wav`);
-    const { durationSec } = await generateNarrationAudio({
-      text: seg.narration,
-      apiKey: process.env.GEMINI_API_KEY,
-      model: process.env.GEMINI_TTS_MODEL,
-      voice: process.env.GEMINI_TTS_VOICE,
-      outPath: audioPath,
-    });
-    seg.audioPath = audioPath;
-    seg.durationSec = durationSec;
-    console.log(`[generate-video]   세그먼트 ${i + 1}/${script.segments.length} 오디오 완료 (${durationSec.toFixed(1)}초)`);
-  }
-
-  console.log('[generate-video] ffmpeg로 영상 조립 중 (줌/팬, 자막은 굽지 않고 SRT로 별도 생성, 썸네일 생성)...');
-  const { finalPath: finalVideoPath, srtPath, thumbnailPath } = await assembleVideo({
-    imagePath,
-    segments: script.segments,
-    painting,
-    workDir: path.join(workDir, 'assembly'),
-  });
-  console.log(`[generate-video] 영상 완성: ${finalVideoPath}`);
-
-  const privacyStatus = process.env.YOUTUBE_PRIVACY_STATUS || 'private';
-  console.log(`[generate-video] YouTube에 "${privacyStatus}" 상태로 업로드 중...`);
-  const uploadResult = await uploadVideo({
-    filePath: finalVideoPath,
-    title: script.youtube.title,
-    description: script.youtube.description,
-    tags: script.youtube.tags,
-    privacyStatus,
-    clientId: process.env.YOUTUBE_CLIENT_ID,
-    clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
-    refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
-  });
-  console.log(`[generate-video] 업로드 완료! 검토용 링크: ${uploadResult.studioUrl}`);
-
-  console.log('[generate-video] 자막(CC) 트랙 업로드 중...');
+  // 여기서부터 업로드 완료까지 중간 어디서든 실패하면(TTS 서버 오류, ffmpeg 실패, 업로드
+  // 인증 오류 등) workDir(원본 이미지/오디오/조립 중간 파일)을 지우지 않고 남겨두면 배치로
+  // 여러 개 돌릴 때 실패한 시도마다 output/ 폴더에 찌꺼기가 계속 쌓입니다. try/finally로
+  // 성공/실패 상관없이 workDir을 정리합니다 (실패 시에도 에러는 그대로 위로 던집니다).
+  let uploadResult;
   try {
-    await uploadCaptions({
-      videoId: uploadResult.videoId,
-      srtPath,
+    console.log('[generate-video] 각 세그먼트 나레이션 오디오 생성 중 (Gemini TTS)...');
+    for (let i = 0; i < script.segments.length; i++) {
+      const seg = script.segments[i];
+      const audioPath = path.join(workDir, `seg-${i}-audio.wav`);
+      const { durationSec } = await generateNarrationAudio({
+        text: seg.narration,
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_TTS_MODEL,
+        voice: process.env.GEMINI_TTS_VOICE,
+        outPath: audioPath,
+      });
+      seg.audioPath = audioPath;
+      seg.durationSec = durationSec;
+      console.log(`[generate-video]   세그먼트 ${i + 1}/${script.segments.length} 오디오 완료 (${durationSec.toFixed(1)}초)`);
+    }
+
+    console.log('[generate-video] ffmpeg로 영상 조립 중 (줌/팬, 자막은 굽지 않고 SRT로 별도 생성, 썸네일 생성)...');
+    const { finalPath: finalVideoPath, srtPath, thumbnailPath } = await assembleVideo({
+      imagePath,
+      segments: script.segments,
+      painting,
+      workDir: path.join(workDir, 'assembly'),
+    });
+    console.log(`[generate-video] 영상 완성: ${finalVideoPath}`);
+
+    const privacyStatus = process.env.YOUTUBE_PRIVACY_STATUS || 'private';
+    console.log(`[generate-video] YouTube에 "${privacyStatus}" 상태로 업로드 중...`);
+    uploadResult = await uploadVideo({
+      filePath: finalVideoPath,
+      title: script.youtube.title,
+      description: script.youtube.description,
+      tags: script.youtube.tags,
+      privacyStatus,
       clientId: process.env.YOUTUBE_CLIENT_ID,
       clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
       refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
     });
-    console.log('[generate-video] 자막 업로드 완료.');
-  } catch (err) {
-    // 영상 업로드 자체는 이미 성공했으니, 자막 업로드가 실패해도 전체 실행을 실패시키지
-    // 않습니다 — 검수 시 YouTube Studio에서 자막을 수동으로 다시 올릴 수 있습니다.
-    console.warn(`[generate-video] 자막 업로드 실패 (영상은 정상 업로드됨): ${err.message}`);
-  }
+    console.log(`[generate-video] 업로드 완료! 검토용 링크: ${uploadResult.studioUrl}`);
 
-  console.log('[generate-video] 썸네일(그림 전체 화면) 업로드 중...');
-  try {
-    await uploadThumbnail({
-      videoId: uploadResult.videoId,
-      thumbnailPath,
-      clientId: process.env.YOUTUBE_CLIENT_ID,
-      clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
-      refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
-    });
-    console.log('[generate-video] 썸네일 업로드 완료.');
-  } catch (err) {
-    // 커스텀 썸네일은 "휴대폰 인증된 채널"만 허용되는 등 계정 설정에 따라 실패할 수 있어서,
-    // 여기서도 전체 실행을 실패시키지 않고 경고만 남깁니다 — 필요하면 YouTube Studio에서
-    // 수동으로 썸네일을 올릴 수 있습니다 (output/ 폴더가 이미 정리된 뒤라면 다시 생성해야 함).
-    console.warn(`[generate-video] 썸네일 업로드 실패 (영상은 정상 업로드됨): ${err.message}`);
+    console.log('[generate-video] 자막(CC) 트랙 업로드 중...');
+    try {
+      await uploadCaptions({
+        videoId: uploadResult.videoId,
+        srtPath,
+        clientId: process.env.YOUTUBE_CLIENT_ID,
+        clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
+        refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
+      });
+      console.log('[generate-video] 자막 업로드 완료.');
+    } catch (err) {
+      // 영상 업로드 자체는 이미 성공했으니, 자막 업로드가 실패해도 전체 실행을 실패시키지
+      // 않습니다 — 검수 시 YouTube Studio에서 자막을 수동으로 다시 올릴 수 있습니다.
+      console.warn(`[generate-video] 자막 업로드 실패 (영상은 정상 업로드됨): ${err.message}`);
+    }
+
+    console.log('[generate-video] 썸네일(그림 전체 화면) 업로드 중...');
+    try {
+      await uploadThumbnail({
+        videoId: uploadResult.videoId,
+        thumbnailPath,
+        clientId: process.env.YOUTUBE_CLIENT_ID,
+        clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
+        refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
+      });
+      console.log('[generate-video] 썸네일 업로드 완료.');
+    } catch (err) {
+      // 커스텀 썸네일은 "휴대폰 인증된 채널"만 허용되는 등 계정 설정에 따라 실패할 수 있어서,
+      // 여기서도 전체 실행을 실패시키지 않고 경고만 남깁니다 — 필요하면 YouTube Studio에서
+      // 수동으로 썸네일을 올릴 수 있습니다 (output/ 폴더가 이미 정리된 뒤라면 다시 생성해야 함).
+      console.warn(`[generate-video] 썸네일 업로드 실패 (영상은 정상 업로드됨): ${err.message}`);
+    }
+  } finally {
+    // 업로드까지 끝났든(성공) 중간에 실패했든, 로컬 임시 산출물(원본 이미지, 오디오,
+    // 중간 영상들)은 여기서 정리합니다. 저장소에는 data/used-paintings.json과
+    // data/log.md만 남습니다.
+    fs.rmSync(workDir, { recursive: true, force: true });
   }
 
   usedList.push({
@@ -214,10 +226,6 @@ export async function generateOneVideo() {
   });
   saveUsed(usedList);
   appendLog({ painting, youtube: script.youtube, uploadResult });
-
-  // 업로드까지 끝났으니 로컬 임시 산출물(원본 이미지, 오디오, 중간 영상들)은 정리합니다.
-  // 저장소에는 data/used-paintings.json과 data/log.md만 남습니다.
-  fs.rmSync(workDir, { recursive: true, force: true });
 
   if (process.env.GITHUB_ENV) {
     fs.appendFileSync(

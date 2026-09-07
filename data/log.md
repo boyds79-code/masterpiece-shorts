@@ -10,3 +10,5 @@
 | 2026-09-07 | Daniel Crommelin Verplanck | John Singleton Copley | [qzKp9xNHGVk](https://studio.youtube.com/video/qzKp9xNHGVk/edit) |
 | 2026-09-07 | Margaret of Austria | Jean Hey (called Master of Moulins) | [QA3qn2t0X1c](https://studio.youtube.com/video/QA3qn2t0X1c/edit) |
 | 2026-09-07 | The Trojan Women Setting Fire to Their Fleet | Claude Lorrain (Claude Gellée) | [1GiGOlSYHDk](https://studio.youtube.com/video/1GiGOlSYHDk/edit) |
+| 2026-09-07 | The union of architecture, sculpture, and painting; exemplified by a series of illustrations, with descriptive accounts of the house and galleries of John Soane ... / by John Britton | John Britton | [60IJnyq55DE](https://studio.youtube.com/video/60IJnyq55DE/edit) |
+| 2026-09-07 | Queen Esther Approaching the Palace of Ahasuerus | Claude Lorrain (Claude Gellée) | [qD1AkINY8M0](https://studio.youtube.com/video/qD1AkINY8M0/edit) |
