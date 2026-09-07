@@ -18,6 +18,48 @@ function parsePcmMimeType(mimeType) {
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 429 응답 본문에서 "retryDelay": "56s" 같은 값을 뽑아냅니다. 없으면 null.
+function parseRetryDelaySeconds(errText) {
+  const match = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(errText || '');
+  return match ? Math.ceil(parseFloat(match[1])) : null;
+}
+
+// Gemini TTS 무료 등급은 분당 요청 수가 매우 적게 제한되어 있어서(예: 3회/분),
+// 영상 하나에 세그먼트가 6~9개면 중간에 429(RESOURCE_EXHAUSTED)를 만나는 게 정상입니다.
+// 실패로 끝내지 않고, 서버가 알려주는 retryDelay(또는 기본 65초)만큼 기다렸다가 자동 재시도합니다.
+const MAX_RETRIES = 5;
+const DEFAULT_RETRY_DELAY_SEC = 65;
+
+async function callGeminiTts({ url, body }) {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) return res.json();
+
+    const errText = await res.text();
+
+    if (res.status === 429 && attempt < MAX_RETRIES) {
+      const delaySec = parseRetryDelaySeconds(errText) ?? DEFAULT_RETRY_DELAY_SEC;
+      console.log(
+        `[gemini-tts]   ⏳ 무료 등급 분당 요청 한도(429)에 걸렸습니다. ${delaySec}초 대기 후 재시도합니다 (${attempt}/${MAX_RETRIES})...`
+      );
+      await sleep((delaySec + 2) * 1000); // 여유 2초 추가
+      continue;
+    }
+
+    throw new Error(`Gemini TTS 호출 실패 (${res.status}): ${errText}`);
+  }
+  throw new Error('Gemini TTS 호출이 재시도 한도를 넘어 계속 실패했습니다 (429).');
+}
+
 /**
  * 대본 한 문단(segment.narration)을 나레이션 오디오(.wav)로 만들어 outPath에 저장하고,
  * 실제 길이(초)를 돌려줍니다. 영상 각 구간의 길이를 이 오디오 길이에 정확히 맞춰야 하므로,
@@ -48,18 +90,7 @@ export async function generateNarrationAudio({ text, apiKey, model, voice, outPa
     },
   };
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini TTS 호출 실패 (${res.status}): ${errText}`);
-  }
-
-  const data = await res.json();
+  const data = await callGeminiTts({ url, body });
   const part = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
   if (!part) {
     throw new Error('Gemini TTS 응답에서 오디오 데이터를 찾지 못했습니다: ' + JSON.stringify(data).slice(0, 500));
