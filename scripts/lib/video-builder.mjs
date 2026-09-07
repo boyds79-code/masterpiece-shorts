@@ -125,6 +125,8 @@ export async function buildTitleCard({ imagePath, lines, durationSec, outPath })
     '-vf', vf,
     '-c:v', 'libx264',
     '-c:a', 'aac',
+    '-ar', String(AUDIO_SAMPLE_RATE),
+    '-ac', String(AUDIO_CHANNELS),
     '-shortest',
     outPath,
   ]);
@@ -133,6 +135,14 @@ export async function buildTitleCard({ imagePath, lines, durationSec, outPath })
   return outPath;
 }
 
+// Gemini TTS는 세그먼트마다 샘플레이트/채널이 살짝 다를 수 있는데(예: 24kHz 모노), 인트로/아웃트로는
+// 44.1kHz 스테레오 무음 트랙입니다. concat demuxer는 모든 입력 파일의 오디오 스트림 규격이 완전히
+// 동일하다고 가정하고 그냥 패킷을 이어붙이는 방식이라, 규격이 섞이면 디코더가 깨져서
+// "channel element ... is not allocated" 같은 알아보기 힘든 에러를 뱉습니다. 그래서 모든 클립의
+// 오디오를 여기서 명시적으로 같은 샘플레이트/채널로 강제 통일합니다.
+const AUDIO_SAMPLE_RATE = 44100;
+const AUDIO_CHANNELS = 2;
+
 export async function muxSegmentAudio({ videoPath, audioPath, outPath }) {
   await run('ffmpeg', [
     '-y',
@@ -140,6 +150,8 @@ export async function muxSegmentAudio({ videoPath, audioPath, outPath }) {
     '-i', audioPath,
     '-c:v', 'libx264',
     '-c:a', 'aac',
+    '-ar', String(AUDIO_SAMPLE_RATE),
+    '-ac', String(AUDIO_CHANNELS),
     '-b:a', '128k',
     '-shortest',
     outPath,
