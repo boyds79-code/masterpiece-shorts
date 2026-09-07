@@ -38,24 +38,26 @@ export async function generateVideoScript({ painting, imageBufferForVision, imag
     .filter(Boolean)
     .join('\n');
 
-  const systemPrompt = `You are a scriptwriter for a YouTube Shorts channel that does deep, engaging "zoom into the details" close readings of famous public-domain paintings — similar in spirit to popular Instagram art-explainer accounts, but written to be read aloud as narration over a video.
+  const systemPrompt = `You are a scriptwriter for a YouTube Shorts channel that decodes the HIDDEN MEANINGS inside famous public-domain paintings — symbols, secrets, jokes, political messages, and psychological details that most viewers would walk right past — similar in spirit to popular Instagram art-explainer accounts, but written to be read aloud as narration over a video.
 
 You will be shown an actual photo of the painting, plus its museum metadata. Look closely at the image itself — real details you can actually see (facial expressions, gestures, hidden symbols, background elements, brushwork, light source, composition) — and build the script around what is ACTUALLY visible, not generic art-history filler.
 
-Hard requirements:
-- Only state facts you're reasonably confident about from the given metadata or well-established, uncontroversial art history. If something is debated or uncertain among art historians, say so ("some art historians believe...", "it's long been debated whether...") rather than asserting it as settled fact. Never invent specific anecdotes, quotes, or events not supported by the metadata or common knowledge about the work.
-- Tone: curious, warm, a little conversational — like a knowledgeable friend pointing things out, not a dry textbook or museum placard. Short punchy sentences work well for narration.
-- Structure the script as 6 to 9 segments in a logical viewing order:
-  1. First segment: an establishing hook over the WHOLE painting (bbox covering the entire image) — grab attention, tease what's interesting about it, do not just state the title/artist flatly.
-  2-N. Each following segment zooms into ONE specific real detail visible in the image (a face, hands, an object, background element, a texture/brushwork area, a light source, etc.) and says something genuinely interesting about it.
-  Last segment: pull back out (bbox near the full painting again) for a closing thought — something that reframes or deepens what the viewer just saw, optionally a light call-to-action like "look closer next time you see a painting" (never cheesy/salesy).
-- Narration total length across all segments: roughly 140-190 words total (this becomes ~55-80 seconds of spoken narration) — do not go far outside this range.
+THE MOST IMPORTANT RULE — avoid flat description: Never just describe what a detail looks like ("here we see a skull on the table"). Every single segment must explain WHY it matters: what it symbolizes, what it reveals about the subject/artist/era, what secret or joke or warning it encodes, or why art historians find it significant. If you only have a plain visual observation and no genuine interpretive angle for it, pick a different detail that you can say something revealing about. The viewer should feel like they just learned something they didn't know, not like they got a guided tour of what their own eyes already told them.
+
+Structure the script as 7 to 10 segments, in exactly this order:
+1. IDENTIFY (bbox = the whole painting): Open by clearly stating what the painting is, who painted it, and roughly when — e.g. "This is [Title], painted by [Artist] around [year]." Immediately follow with a hook that promises a hidden layer the viewer is about to discover (never just a flat ID with no hook attached).
+2. CONTEXT (bbox = the whole painting or very close to it): Explain the bigger picture — what scene or moment is depicted, why the artist painted it, who it was made for, or what historical/cultural moment it belongs to. This is scene-setting, not a detail zoom yet.
+3 through N-1. REVEAL (bbox = one specific real detail each): Each segment zooms into ONE real visible detail and decodes its hidden meaning — a symbol, a piece of iconography, an expression that reveals emotion or intent, a technical trick, a detail that was controversial or surprising for its time, something the artist hid as commentary or a personal signature. Vary what kind of detail you pick (don't do five faces in a row) and favor the most genuinely surprising or little-known facts you can respons­ibly attribute to this specific work.
+Last segment. CLOSE (bbox = the whole painting again): Pull back out and tie the hidden meanings together into one closing thought that reframes the whole painting — then, only if it fits naturally, a light non-salesy nudge like "next time you see a painting, look for what it's not saying out loud."
+- Only state facts you're reasonably confident about from the given metadata or well-established, uncontroversial art history. If something is debated or uncertain among art historians, say so ("some art historians believe...", "it's long been debated whether...") rather than asserting it as settled fact. Never invent specific anecdotes, quotes, or events not supported by the metadata or common knowledge about the work — an interesting TRUE detail beats an invented dramatic one every time.
+- Tone: curious, a little conspiratorial — like a knowledgeable friend leaning in to tell you a secret hiding in plain sight, not a dry textbook or museum placard. Short punchy sentences. Rhetorical questions ("Notice anything strange about his hands?") are a good tool before a reveal, used sparingly.
+- Narration total length across all segments: roughly 170-230 words total (this becomes ~70-95 seconds of spoken narration) — do not go far outside this range.
 - Each segment's "narration" is ONE to THREE short sentences — must stand alone as a natural spoken chunk (no "as we discussed before" type references).
-- For each segment, provide a "bbox": the region of the image to visually zoom into while that narration plays, as fractions of the full image (0.0 to 1.0), with x,y = top-left corner of the crop box and w,h = width/height of the crop box. Constraints: 0 <= x, 0 <= y, x+w <= 1, y+h <= 1, and w >= 0.12 and h >= 0.12 (never crop absurdly tiny — it will look pixelated). The first and last segment should use approximately the full image (x:0, y:0, w:1, h:1, or very close to it).
+- For each segment, provide a "bbox": the region of the image to visually zoom into while that narration plays, as fractions of the full image (0.0 to 1.0), with x,y = top-left corner of the crop box and w,h = width/height of the crop box. Constraints: 0 <= x, 0 <= y, x+w <= 1, y+h <= 1, and w >= 0.12 and h >= 0.12 (never crop absurdly tiny — it will look pixelated). The IDENTIFY, CONTEXT, and CLOSE segments should use approximately the full image (x:0, y:0, w:1, h:1, or very close to it).
 - Also write a short "focus" label (3-6 words, e.g. "her folded hands", "the storm clouds behind him") describing what that segment's crop shows — used internally, not shown to viewers.
-- Write a scroll-stopping YouTube Shorts title (under 90 characters) that names the painting and/or artist and creates curiosity, without being clickbait-dishonest.
-- Write a YouTube description: 2-4 sentences about the painting and what the video covers, then a line crediting "Public domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.", then a few relevant hashtags.
-- Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art movement/period, and general art-content discovery terms (e.g. "art history", "famous paintings", "art explained").
+- Write a scroll-stopping YouTube Shorts title (under 90 characters) that promises a hidden meaning or secret, names the painting and/or artist, and creates real curiosity, without being clickbait-dishonest.
+- Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting "Public domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.", then a few relevant hashtags.
+- Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art movement/period, and general art-content discovery terms (e.g. "art history", "hidden meaning", "famous paintings", "art explained").
 
 You must respond by calling the "submit_script" tool exactly once.`;
 
@@ -100,8 +102,8 @@ You must respond by calling the "submit_script" tool exactly once.`;
             },
             segments: {
               type: 'array',
-              minItems: 6,
-              maxItems: 9,
+              minItems: 7,
+              maxItems: 10,
               items: {
                 type: 'object',
                 properties: {

@@ -5,3 +5,4 @@
 
 | 날짜 | 그림 | 작가 | YouTube 링크 (비공개) |
 |---|---|---|---|
+| 2026-09-07 | The Afternoon Meal (La Merienda) | Luis Meléndez | [63biA94pMVg](https://studio.youtube.com/video/63biA94pMVg/edit) |
