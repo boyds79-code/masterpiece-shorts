@@ -12,3 +12,6 @@
 | 2026-09-07 | The Trojan Women Setting Fire to Their Fleet | Claude Lorrain (Claude Gellée) | [1GiGOlSYHDk](https://studio.youtube.com/video/1GiGOlSYHDk/edit) |
 | 2026-09-07 | The union of architecture, sculpture, and painting; exemplified by a series of illustrations, with descriptive accounts of the house and galleries of John Soane ... / by John Britton | John Britton | [60IJnyq55DE](https://studio.youtube.com/video/60IJnyq55DE/edit) |
 | 2026-09-07 | Queen Esther Approaching the Palace of Ahasuerus | Claude Lorrain (Claude Gellée) | [qD1AkINY8M0](https://studio.youtube.com/video/qD1AkINY8M0/edit) |
+| 2026-09-07 | Madonna and Child | Filippino Lippi | [QupUywAqZxw](https://studio.youtube.com/video/QupUywAqZxw/edit) |
+| 2026-09-07 | Lion (one of a pair) | Johann Gottlieb Kirchner | [nofBaB_0KmA](https://studio.youtube.com/video/nofBaB_0KmA/edit) |
+| 2026-09-07 | Madame de Wailly, née Adélaïde-Flore Belleville (1765–1838) | Augustin Pajou | [ye0ao0MkOWE](https://studio.youtube.com/video/ye0ao0MkOWE/edit) |
