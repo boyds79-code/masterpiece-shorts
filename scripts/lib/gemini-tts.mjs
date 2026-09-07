@@ -46,6 +46,17 @@ async function callGeminiTts({ url, body }) {
 
     const errText = await res.text();
 
+    // "PerDay" 한도는 며칠 자릿수라 몇십 초 기다리는 재시도로는 절대 안 풀립니다 —
+    // 괜히 재시도로 시간 낭비하지 말고 바로 명확한 에러로 알려줍니다.
+    if (res.status === 429 && /PerDay/i.test(errText)) {
+      throw new Error(
+        `Gemini TTS 무료 등급의 "하루 요청 횟수" 한도를 넘었습니다 (재시도로 해결 안 됨). ` +
+          `Google Cloud 프로젝트에 결제(billing)를 연결하면 한도가 크게 늘어납니다 — ` +
+          `https://aistudio.google.com/apikey 또는 Google Cloud Console → Billing에서 설정하세요. ` +
+          `원본 에러: ${errText}`
+      );
+    }
+
     if (res.status === 429 && attempt < MAX_RETRIES) {
       const delaySec = parseRetryDelaySeconds(errText) ?? DEFAULT_RETRY_DELAY_SEC;
       console.log(
