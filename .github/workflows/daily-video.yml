@@ -1,0 +1,57 @@
+name: Daily masterpiece short
+
+on:
+  schedule:
+    # 매일 22:00 UTC (한국시간 오전 7시)
+    - cron: '0 22 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  generate-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # data/used-paintings.json, data/log.md를 다시 커밋해서 push해야 하므로
+          # 기본 GITHUB_TOKEN이 아니라 PAT_TOKEN으로 checkout합니다 (다른 블로그 프로젝트와 동일 패턴).
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install ffmpeg and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate script, audio, video and upload to YouTube
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_TTS_MODEL: ${{ vars.GEMINI_TTS_MODEL }}
+          GEMINI_TTS_VOICE: ${{ vars.GEMINI_TTS_VOICE }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_PRIVACY_STATUS: ${{ vars.YOUTUBE_PRIVACY_STATUS }}
+        run: npm run generate
+
+      - name: Commit updated tracking files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/used-paintings.json data/log.md
+          git diff --cached --quiet && echo "변경 없음, 커밋 건너뜀" || git commit -m "Log video: ${PAINTING_TITLE:-unknown painting}"
+          git push

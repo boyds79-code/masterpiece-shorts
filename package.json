@@ -1,0 +1,17 @@
+{
+  "name": "masterpiece-shorts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Automated pipeline: public-domain masterpiece paintings -> narrated short-form video -> private YouTube upload for review.",
+  "scripts": {
+    "generate": "node scripts/generate-video.mjs",
+    "get-youtube-token": "node scripts/get-youtube-token.mjs"
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  }
+}

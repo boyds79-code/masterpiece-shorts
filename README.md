@@ -1,0 +1,158 @@
+# Masterpiece Shorts — 명화 숏폼 자동화
+
+퍼블릭 도메인(저작권 만료) 명화를 하나 골라서, Claude가 그림을 직접 보고 "세부를 파고드는"
+나레이션 대본을 쓰고, Gemini가 그 대본을 음성으로 읽고, ffmpeg이 줌/팬 효과와 자막을 입힌
+9:16 숏폼 영상으로 조립한 뒤, YouTube에 **비공개(private)** 로 업로드하는 완전 자동 파이프라인입니다.
+
+**중요: 영상은 자동으로 "공개"되지 않습니다.** 매일 자동으로 만들어져서 비공개 상태로
+채널에 올라가고, 당신이 YouTube Studio에서 직접 확인한 뒤 공개로 전환해야 실제로
+사람들이 볼 수 있습니다 — 블로그 4개 프로젝트의 "자동 초안 + 사람 검수" 철학과 동일합니다.
+
+## 어떻게 작동하나요
+
+1. 매일 정해진 시간에 GitHub Actions(`daily-video.yml`)가 실행됩니다.
+2. 메트로폴리탄 미술관(Met) Open Access API에서, 아직 쓰지 않은 "하이라이트(대표작)"
+   유화 중 하나를 무작위로 고릅니다. `isPublicDomain: true`인 작품만 사용합니다 (CC0, API 키 불필요).
+3. 그 그림 이미지를 Claude에게 실제로 보여주고, 진짜 그 그림에 있는 디테일(표정, 손,
+   배경, 상징물, 붓터치 등)을 근거로 6~9개 구간짜리 나레이션 대본과 각 구간이 확대할
+   영역(bbox)을 받습니다.
+4. 각 구간의 나레이션을 Gemini TTS로 음성 변환합니다.
+5. ffmpeg으로 각 구간마다 해당 영역을 확대/팬(Ken Burns 효과)하고 자막을 태운 뒤,
+   인트로(제목 카드) + 본편 + 아웃트로(팔로우 유도 카드)를 이어 붙여 9:16 영상을 만듭니다.
+6. 완성된 영상을 YouTube에 **비공개**로 업로드합니다.
+7. 어떤 그림을 이미 썼는지(`data/used-paintings.json`)와 결과 기록(`data/log.md`)을
+   저장소에 커밋해서, 같은 그림이 반복되지 않게 합니다.
+8. 당신이 YouTube Studio에서 영상을 확인 → 제목/설명 다듬고 싶으면 수정 → **공개로 전환**합니다.
+
+## 시작하기 (처음 한 번만)
+
+### 1. 로컬에서 확인
+```bash
+npm install
+cp .env.example .env
+# .env에 아래 "2~4" 단계에서 발급받을 키들을 채우세요
+set -a && source .env && set +a
+npm run generate   # 실제로 그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드까지 한 번 실행
+```
+
+### 2. Anthropic API 키
+https://console.anthropic.com 에서 발급 (다른 블로그 프로젝트에서 쓰던 키를 재사용해도 됩니다).
+
+### 3. Gemini API 키
+https://aistudio.google.com/apikey 에서 무료로 발급 (역시 재사용 가능). Gemini TTS는
+2025년 기준 preview 모델이라 무료 등급에 요청 수 제한이 있을 수 있습니다 — 실패하면
+콘솔에서 결제(종량제) 활성화가 필요할 수 있습니다.
+
+### 4. YouTube 설정 (가장 손이 많이 가는 단계입니다)
+
+**4-1. Google Cloud 프로젝트 + YouTube Data API 활성화**
+1. https://console.cloud.google.com 에서 새 프로젝트를 만듭니다 (또는 기존 프로젝트 사용).
+2. **APIs & Services → Library**에서 "YouTube Data API v3"를 검색해서 **Enable**.
+
+**4-2. OAuth 동의 화면**
+1. **APIs & Services → OAuth consent screen**에서 User Type을 **External**로 선택.
+2. 앱 이름/이메일 등 최소 정보만 입력하고 저장 (게시 상태는 "Testing"이어도 됩니다 —
+   본인 계정만 쓸 거라면 굳이 심사받을 필요 없습니다).
+3. **Test users**에 본인의 유튜브 채널 소유 구글 계정 이메일을 추가하세요. (Testing 상태인
+   앱은 여기 등록된 계정으로만 로그인이 허용됩니다.)
+
+**4-3. OAuth 클라이언트 ID 발급**
+1. **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+2. Application type: **Desktop app** 선택, 이름은 아무거나.
+3. 생성되면 **Client ID**와 **Client Secret**이 나옵니다 — 이 둘을 `.env`의
+   `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET`에 넣으세요.
+
+**4-4. Refresh token 발급 (최초 1회, 당신의 맥에서 직접 실행)**
+```bash
+set -a && source .env && set +a
+npm run get-youtube-token
+```
+브라우저가 자동으로 열립니다 (안 열리면 터미널에 뜬 URL을 직접 여세요). 채널 소유 계정으로
+로그인하고 "허용"을 누르면, 터미널에 **refresh token**이 출력됩니다. 이 값을 복사해두세요.
+
+> Google이 "확인되지 않은 앱" 경고를 보여줄 수 있습니다 — 본인이 방금 만든 앱이 맞으므로
+> "고급(Advanced) → OO(으)로 이동(안전하지 않음)"을 눌러 진행하면 됩니다.
+
+### 5. GitHub 저장소 만들고 Secrets 등록
+```bash
+git init
+git add -A
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin <당신의-저장소-URL>
+git push -u origin main
+```
+
+저장소 **Settings → Secrets and variables → Actions**에서:
+
+**Secrets** (New repository secret):
+- `ANTHROPIC_API_KEY`
+- `GEMINI_API_KEY`
+- `YOUTUBE_CLIENT_ID`
+- `YOUTUBE_CLIENT_SECRET`
+- `YOUTUBE_REFRESH_TOKEN`
+- `PAT_TOKEN` — 다른 블로그 프로젝트에서 이미 만든 Personal Access Token을 그대로
+  재사용할 수 있습니다 (repo 쓰기 권한이 있는 토큰이면 됩니다). 이 프로젝트는 PR을 만들지
+  않고, 결과 기록 파일(`data/`)을 바로 `main`에 커밋하기 위해 필요합니다.
+
+**Variables** (선택, 기본값을 바꾸고 싶을 때만):
+- `CLAUDE_MODEL` (기본: `claude-sonnet-4-5-20250929`)
+- `GEMINI_TTS_MODEL` (기본: `gemini-2.5-flash-preview-tts`)
+- `GEMINI_TTS_VOICE` (기본: `Kore` — 다른 사전정의 음성 목록은 Gemini 공식 문서 참고)
+- `YOUTUBE_PRIVACY_STATUS` (기본: `private`. `unlisted`로 바꾸면 링크를 아는 사람은
+  검수 전에도 볼 수 있습니다 — 완전히 비공개로 두고 싶으면 건드리지 마세요)
+
+### 6. GitHub Actions에 저장소 쓰기 권한 확인
+저장소 **Settings → Actions → General → Workflow permissions**에서
+"Read and write permissions"가 켜져 있는지 확인하세요.
+
+### 7. 첫 실행 테스트
+저장소 **Actions 탭 → Daily masterpiece short → Run workflow**를 눌러 수동으로 한 번
+실행해보세요. 실행이 끝나면 로그 마지막 줄에 뜨는 YouTube Studio 링크로 들어가서
+결과를 확인하세요.
+
+## 검수 후 공개하기
+
+1. https://studio.youtube.com → **콘텐츠** 탭에서 방금 올라온 (비공개) 영상을 확인합니다.
+2. 자막/제목/설명이 마음에 들면 그대로, 아니면 직접 수정합니다.
+3. 공개 범위를 **비공개 → 공개(또는 일부공개)** 로 바꾸면 그때부터 실제로 노출됩니다.
+
+## 저작권/법적 참고사항 (법률 자문 아님)
+
+- 이 파이프라인은 메트로폴리탄 미술관 Open Access API에서 `isPublicDomain: true`로
+  명시된 작품만 사용합니다 — 미술관이 CC0(저작권 없음)로 공개한 이미지입니다.
+- 원작자가 사망한 지 오래된(즉 원작 자체가 퍼블릭 도메인인) 작품만 대상이 되도록
+  Met의 "European Paintings" 하이라이트 컬렉션으로 소재를 제한하고 있습니다 — 사후
+  저작권이 아직 살아있는 현대 작가의 작품은 다루지 않습니다.
+- 나레이션 대본은 매번 새로 생성되는 원작 해설이며, 특정 인스타그램 계정이나 다른
+  창작자의 문구를 그대로 베끼지 않습니다 — "명화 세부를 확대해서 설명한다"는 포맷/아이디어
+  자체는 저작권 보호 대상이 아니지만, 실제 서비스 전 한 번쯤 관련 유튜브 정책(재사용
+  콘텐츠, "다시 게시된 콘텐츠" 정책 등)을 직접 확인해보는 것을 권장합니다.
+- YouTube 각 영상 설명란에 자동으로 "Public domain image via The Metropolitan
+  Museum of Art (CC0)" 출처 표기가 들어갑니다.
+
+## 프로젝트 구조
+
+```
+scripts/generate-video.mjs      메인 파이프라인 (그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드)
+scripts/get-youtube-token.mjs   최초 1회 로컬 실행용 OAuth refresh token 발급 스크립트
+scripts/lib/met-api.mjs         메트로폴리탄 미술관 Open Access API
+scripts/lib/anthropic.mjs       Claude(vision)로 대본 생성
+scripts/lib/gemini-tts.mjs      Gemini TTS로 나레이션 음성 생성
+scripts/lib/video-builder.mjs   ffmpeg 기반 영상 조립 (줌/팬, 자막, 인트로/아웃트로)
+scripts/lib/youtube-upload.mjs  YouTube Data API v3 업로드
+data/used-paintings.json        이미 쓴 그림 목록 (중복 방지, 자동 갱신)
+data/log.md                     생성된 영상 기록 (자동 갱신)
+.github/workflows/daily-video.yml  매일 실행되는 자동화
+```
+
+## 로컬에서 다시 테스트하기
+
+```bash
+set -a && source .env && set +a
+npm run generate
+```
+
+매번 실행할 때마다 실제로 YouTube에 (비공개) 업로드까지 됩니다 — 테스트를 너무 자주
+돌리면 채널에 비공개 영상이 계속 쌓이니, 다 확인했으면 YouTube Studio에서 필요 없는
+테스트 영상은 삭제하세요.
