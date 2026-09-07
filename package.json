@@ -6,6 +6,7 @@
   "description": "Automated pipeline: public-domain masterpiece paintings -> narrated short-form video -> private YouTube upload for review.",
   "scripts": {
     "generate": "node scripts/generate-video.mjs",
+    "generate:batch": "node scripts/generate-batch.mjs",
     "get-youtube-token": "node scripts/get-youtube-token.mjs"
   },
   "dependencies": {

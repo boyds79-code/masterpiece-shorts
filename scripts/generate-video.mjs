@@ -14,7 +14,6 @@ const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(import.meta.dirname, '..');
 const USED_PATH = path.join(ROOT, 'data', 'used-paintings.json');
 const LOG_PATH = path.join(ROOT, 'data', 'log.md');
-const WORK_DIR = path.join(ROOT, 'output', `run-${Date.now()}`);
 
 function loadUsed() {
   if (!fs.existsSync(USED_PATH)) return [];
@@ -49,8 +48,18 @@ async function makeVisionCopy(originalPath, outPath) {
 // 그 그림은 "skipped"로 기록해서 다음에 다시 뽑히지 않게 하고 다른 그림으로 넘어갑니다.
 const MAX_PAINTING_ATTEMPTS = 4;
 
-async function main() {
-  fs.mkdirSync(WORK_DIR, { recursive: true });
+/**
+ * 영상 하나(그림 선정 -> 대본 -> 나레이션 -> 영상 조립 -> YouTube 업로드)를 처음부터 끝까지
+ * 만듭니다. generate-batch.mjs가 이 함수를 여러 번 반복 호출해서 한 번에 여러 개를 만들 때도
+ * 쓰고, 이 파일을 직접 실행(`npm run generate`)할 때도 씁니다.
+ *
+ * @returns {Promise<{ painting: object, script: object, uploadResult: object } | null>}
+ *   성공하면 결과 정보를 반환하고, 시도 가능한 그림을 다 소진해서 더 만들 게 없으면 null을 반환합니다.
+ */
+export async function generateOneVideo() {
+  // 같은 프로세스 안에서 여러 번 호출될 수 있으므로(배치 실행) 매번 새 작업 폴더를 만듭니다.
+  const workDir = path.join(ROOT, 'output', `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  fs.mkdirSync(workDir, { recursive: true });
 
   const usedList = loadUsed();
   let painting = null;
@@ -64,13 +73,14 @@ async function main() {
 
     if (!candidate) {
       console.log('[generate-video] 하이라이트로 지정된 유럽 회화 작품을 모두 소진했습니다. 새 department를 추가해야 합니다 (scripts/lib/met-api.mjs의 DEPARTMENT_IDS 참고).');
-      return;
+      fs.rmSync(workDir, { recursive: true, force: true });
+      return null;
     }
 
     console.log(`[generate-video] 선정: "${candidate.title}" — ${candidate.artistDisplayName} (${candidate.objectDate})`);
 
-    imagePath = path.join(WORK_DIR, 'original.jpg');
-    visionPath = path.join(WORK_DIR, 'vision.jpg');
+    imagePath = path.join(workDir, 'original.jpg');
+    visionPath = path.join(workDir, 'vision.jpg');
     const imageBuffer = await downloadImage(candidate.primaryImage);
     fs.writeFileSync(imagePath, imageBuffer);
     await makeVisionCopy(imagePath, visionPath);
@@ -112,7 +122,7 @@ async function main() {
   console.log('[generate-video] 각 세그먼트 나레이션 오디오 생성 중 (Gemini TTS)...');
   for (let i = 0; i < script.segments.length; i++) {
     const seg = script.segments[i];
-    const audioPath = path.join(WORK_DIR, `seg-${i}-audio.wav`);
+    const audioPath = path.join(workDir, `seg-${i}-audio.wav`);
     const { durationSec } = await generateNarrationAudio({
       text: seg.narration,
       apiKey: process.env.GEMINI_API_KEY,
@@ -130,7 +140,7 @@ async function main() {
     imagePath,
     segments: script.segments,
     painting,
-    workDir: path.join(WORK_DIR, 'assembly'),
+    workDir: path.join(workDir, 'assembly'),
   });
   console.log(`[generate-video] 영상 완성: ${finalVideoPath}`);
 
@@ -193,7 +203,7 @@ async function main() {
 
   // 업로드까지 끝났으니 로컬 임시 산출물(원본 이미지, 오디오, 중간 영상들)은 정리합니다.
   // 저장소에는 data/used-paintings.json과 data/log.md만 남습니다.
-  fs.rmSync(WORK_DIR, { recursive: true, force: true });
+  fs.rmSync(workDir, { recursive: true, force: true });
 
   if (process.env.GITHUB_ENV) {
     fs.appendFileSync(
@@ -201,9 +211,16 @@ async function main() {
       `VIDEO_TITLE=${script.youtube.title}\nVIDEO_ID=${uploadResult.videoId}\nPAINTING_TITLE=${painting.title}\n`
     );
   }
+
+  return { painting, script, uploadResult };
 }
 
-main().catch((err) => {
-  console.error('[generate-video] 실패:', err);
-  process.exit(1);
-});
+// 이 파일을 직접 실행했을 때만(`npm run generate`) 한 번 돌립니다. generate-batch.mjs처럼
+// 다른 파일에서 generateOneVideo()를 import해서 쓸 때는 이 블록이 실행되지 않습니다.
+const isMainModule = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.dirname, 'generate-video.mjs');
+if (isMainModule) {
+  generateOneVideo().catch((err) => {
+    console.error('[generate-video] 실패:', err);
+    process.exit(1);
+  });
+}
