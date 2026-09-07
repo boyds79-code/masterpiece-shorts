@@ -68,6 +68,27 @@ export async function uploadVideo({
 }
 
 /**
+ * 그림 전체가 잘리지 않고 다 보이는 썸네일 이미지를 영상에 지정합니다.
+ * 주의: YouTube는 커스텀 썸네일 업로드에 "휴대폰 인증된 채널"만 허용합니다 — 채널이
+ * 인증되어 있지 않으면 이 호출이 실패할 수 있습니다 (YouTube Studio → 설정 → 채널 →
+ * 기능 사용 자격요건에서 확인/인증 가능). 실패해도 영상 업로드 자체는 이미 끝난
+ * 상태이므로, 호출하는 쪽(generate-video.mjs)에서 try/catch로 감싸 전체 실행을
+ * 실패시키지 않습니다.
+ */
+export async function uploadThumbnail({ videoId, thumbnailPath, clientId, clientSecret, refreshToken }) {
+  const auth = buildOAuthClient({ clientId, clientSecret, refreshToken });
+  const youtube = google.youtube({ version: 'v3', auth });
+
+  await youtube.thumbnails.set({
+    videoId,
+    media: {
+      mimeType: 'image/jpeg',
+      body: fs.createReadStream(thumbnailPath),
+    },
+  });
+}
+
+/**
  * 영상에는 자막을 굽지 않는 대신(폰트가 딱딱해 보인다는 피드백), SRT 파일을 별도의
  * YouTube 자막(Closed Caption) 트랙으로 업로드합니다. 시청자가 CC를 켜면 유튜브
  * 플레이어 자체 폰트/스타일로 자막이 나옵니다.

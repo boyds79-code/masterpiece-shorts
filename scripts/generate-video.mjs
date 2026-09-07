@@ -7,7 +7,7 @@ import { pickUnusedPainting, downloadImage } from './lib/met-api.mjs';
 import { generateVideoScript } from './lib/anthropic.mjs';
 import { generateNarrationAudio } from './lib/gemini-tts.mjs';
 import { assembleVideo } from './lib/video-builder.mjs';
-import { uploadVideo, uploadCaptions } from './lib/youtube-upload.mjs';
+import { uploadVideo, uploadCaptions, uploadThumbnail } from './lib/youtube-upload.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -124,8 +124,8 @@ async function main() {
     console.log(`[generate-video]   세그먼트 ${i + 1}/${script.segments.length} 오디오 완료 (${durationSec.toFixed(1)}초)`);
   }
 
-  console.log('[generate-video] ffmpeg로 영상 조립 중 (줌/팬, 자막은 굽지 않고 SRT로 별도 생성)...');
-  const { finalPath: finalVideoPath, srtPath } = await assembleVideo({
+  console.log('[generate-video] ffmpeg로 영상 조립 중 (줌/팬, 자막은 굽지 않고 SRT로 별도 생성, 썸네일 생성)...');
+  const { finalPath: finalVideoPath, srtPath, thumbnailPath } = await assembleVideo({
     imagePath,
     segments: script.segments,
     painting,
@@ -161,6 +161,23 @@ async function main() {
     // 영상 업로드 자체는 이미 성공했으니, 자막 업로드가 실패해도 전체 실행을 실패시키지
     // 않습니다 — 검수 시 YouTube Studio에서 자막을 수동으로 다시 올릴 수 있습니다.
     console.warn(`[generate-video] 자막 업로드 실패 (영상은 정상 업로드됨): ${err.message}`);
+  }
+
+  console.log('[generate-video] 썸네일(그림 전체 화면) 업로드 중...');
+  try {
+    await uploadThumbnail({
+      videoId: uploadResult.videoId,
+      thumbnailPath,
+      clientId: process.env.YOUTUBE_CLIENT_ID,
+      clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
+      refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
+    });
+    console.log('[generate-video] 썸네일 업로드 완료.');
+  } catch (err) {
+    // 커스텀 썸네일은 "휴대폰 인증된 채널"만 허용되는 등 계정 설정에 따라 실패할 수 있어서,
+    // 여기서도 전체 실행을 실패시키지 않고 경고만 남깁니다 — 필요하면 YouTube Studio에서
+    // 수동으로 썸네일을 올릴 수 있습니다 (output/ 폴더가 이미 정리된 뒤라면 다시 생성해야 함).
+    console.warn(`[generate-video] 썸네일 업로드 실패 (영상은 정상 업로드됨): ${err.message}`);
   }
 
   usedList.push({

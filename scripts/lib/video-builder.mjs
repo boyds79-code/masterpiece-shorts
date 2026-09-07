@@ -135,6 +135,32 @@ export async function buildTitleCard({ imagePath, lines, durationSec, outPath })
   return outPath;
 }
 
+/**
+ * YouTube 썸네일용 정지 이미지를 만듭니다. 인트로 카드와 달리 그림을 잘라내지(crop) 않고
+ * 전체가 다 보이도록 비율에 맞춰 안쪽에 맞추고(letterbox/pillarbox), 남는 여백은 같은
+ * 그림을 흐릿하게 확대한 배경으로 채웁니다 — 검은 여백 없이 그림 전체를 꽉 찬 느낌으로
+ * 보여주기 위해서입니다.
+ */
+export async function buildThumbnail({ imagePath, outPath }) {
+  const filterComplex = [
+    `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},boxblur=25:5,eq=brightness=-0.08[bg]`,
+    `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease[fg]`,
+    `[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto,format=yuv420p[out]`,
+  ].join(';');
+
+  await run('ffmpeg', [
+    '-y',
+    '-i', imagePath,
+    '-filter_complex', filterComplex,
+    '-map', '[out]',
+    '-frames:v', '1',
+    '-q:v', '2',
+    outPath,
+  ]);
+
+  return outPath;
+}
+
 // Gemini TTS는 세그먼트마다 샘플레이트/채널이 살짝 다를 수 있는데(예: 24kHz 모노), 인트로/아웃트로는
 // 44.1kHz 스테레오 무음 트랙입니다. concat demuxer는 모든 입력 파일의 오디오 스트림 규격이 완전히
 // 동일하다고 가정하고 그냥 패킷을 이어붙이는 방식이라, 규격이 섞이면 디코더가 깨져서
@@ -211,11 +237,12 @@ export async function concatClips(clipPaths, outPath) {
 
 /**
  * 전체 파이프라인: 세그먼트별 클립 생성 -> 오디오 합성 -> 인트로/아웃트로 -> 이어붙이기
- * -> SRT 자막 파일 생성. segments 각 항목은 { narration, bbox, audioPath, durationSec }를
- * 가지고 있어야 합니다.
+ * -> SRT 자막 파일 생성 -> 썸네일 이미지 생성. segments 각 항목은
+ * { narration, bbox, audioPath, durationSec }를 가지고 있어야 합니다.
  *
- * @returns {{ finalPath: string, srtPath: string }} finalPath는 자막이 굽지 않은(burned-in
- *   caption 없는) 영상이고, srtPath는 YouTube 자막(CC) 트랙으로 별도 업로드할 SRT 파일입니다.
+ * @returns {{ finalPath: string, srtPath: string, thumbnailPath: string }} finalPath는 자막이
+ *   굽지 않은(burned-in caption 없는) 영상이고, srtPath는 YouTube 자막(CC) 트랙으로 별도
+ *   업로드할 SRT 파일, thumbnailPath는 그림 전체가 잘리지 않고 다 보이는 썸네일 이미지입니다.
  */
 export async function assembleVideo({ imagePath, segments, painting, workDir }) {
   fs.mkdirSync(workDir, { recursive: true });
@@ -265,5 +292,8 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
   const srtPath = path.join(workDir, 'captions.srt');
   fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
 
-  return { finalPath, srtPath };
+  const thumbnailPath = path.join(workDir, 'thumbnail.jpg');
+  await buildThumbnail({ imagePath, outPath: thumbnailPath });
+
+  return { finalPath, srtPath, thumbnailPath };
 }
