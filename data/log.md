@@ -7,3 +7,4 @@
 |---|---|---|---|
 | 2026-09-07 | The Afternoon Meal (La Merienda) | Luis Meléndez | [63biA94pMVg](https://studio.youtube.com/video/63biA94pMVg/edit) |
 | 2026-09-07 | Music-Making Angels | Albrecht Dürer | [FzLGsGX4rJQ](https://studio.youtube.com/video/FzLGsGX4rJQ/edit) |
+| 2026-09-07 | Daniel Crommelin Verplanck | John Singleton Copley | [qzKp9xNHGVk](https://studio.youtube.com/video/qzKp9xNHGVk/edit) |

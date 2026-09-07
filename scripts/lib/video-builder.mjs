@@ -33,6 +33,28 @@ export async function getImageDimensions(imagePath) {
   return { width, height };
 }
 
+/**
+ * bbox(0~1 비율)에 해당하는 영역만 정지 이미지로 잘라냅니다. anthropic.mjs가 "Claude가
+ * 고른 확대 영역이 실제로 의도한 디테일을 보여주는지" 검증할 때, 그 crop 미리보기를
+ * 만드는 데 씁니다 (다람쥐를 보라면서 실제로는 손이 확대되는 것 같은 오류를 잡기 위함).
+ */
+export async function cropStill({ imagePath, bbox, imgWidth, imgHeight, outPath }) {
+  const cw = Math.max(2, Math.round(bbox.w * imgWidth));
+  const ch = Math.max(2, Math.round(bbox.h * imgHeight));
+  const cx = Math.min(imgWidth - cw, Math.max(0, Math.round(bbox.x * imgWidth)));
+  const cy = Math.min(imgHeight - ch, Math.max(0, Math.round(bbox.y * imgHeight)));
+
+  await run('ffmpeg', [
+    '-y',
+    '-i', imagePath,
+    '-vf', `crop=${cw}:${ch}:${cx}:${cy}`,
+    '-q:v', '3',
+    outPath,
+  ]);
+
+  return outPath;
+}
+
 // 자막이 화면 폭을 벗어나지 않도록 대략적인 글자 수 기준으로 줄바꿈합니다.
 // (drawtext는 자동 줄바꿈을 지원하지 않아 직접 처리해야 합니다.)
 function wrapText(text, maxCharsPerLine = 26) {

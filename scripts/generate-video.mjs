@@ -80,6 +80,7 @@ async function main() {
       script = await generateVideoScript({
         painting: candidate,
         imageBufferForVision: fs.readFileSync(visionPath),
+        imagePath: visionPath,
         imageMediaType: 'image/jpeg',
         apiKey: process.env.ANTHROPIC_API_KEY,
         model: process.env.CLAUDE_MODEL,
