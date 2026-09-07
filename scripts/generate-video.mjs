@@ -44,35 +44,68 @@ async function makeVisionCopy(originalPath, outPath) {
   ]);
 }
 
+// Claude vision이 특정 그림(예: 누드가 포함된 종교화/신화화 등 고전 명화에 흔한 소재)에 대해
+// 조심스러워져서 segments를 비운 채로 반환하는 경우가 있습니다 — 전체 실행을 실패시키는 대신,
+// 그 그림은 "skipped"로 기록해서 다음에 다시 뽑히지 않게 하고 다른 그림으로 넘어갑니다.
+const MAX_PAINTING_ATTEMPTS = 4;
+
 async function main() {
   fs.mkdirSync(WORK_DIR, { recursive: true });
 
-  console.log('[generate-video] 메트로폴리탄 미술관에서 아직 쓰지 않은 명화를 고르는 중...');
   const usedList = loadUsed();
-  const usedIds = usedList.map((u) => u.objectID);
-  const painting = await pickUnusedPainting(usedIds);
+  let painting = null;
+  let script = null;
+  let imagePath, visionPath;
 
-  if (!painting) {
-    console.log('[generate-video] 하이라이트로 지정된 유럽 회화 작품을 모두 소진했습니다. 새 department를 추가해야 합니다 (scripts/lib/met-api.mjs의 DEPARTMENT_IDS 참고).');
-    return;
+  for (let attempt = 1; attempt <= MAX_PAINTING_ATTEMPTS; attempt++) {
+    console.log(`[generate-video] 메트로폴리탄 미술관에서 아직 쓰지 않은 명화를 고르는 중... (시도 ${attempt}/${MAX_PAINTING_ATTEMPTS})`);
+    const usedIds = usedList.map((u) => u.objectID);
+    const candidate = await pickUnusedPainting(usedIds);
+
+    if (!candidate) {
+      console.log('[generate-video] 하이라이트로 지정된 유럽 회화 작품을 모두 소진했습니다. 새 department를 추가해야 합니다 (scripts/lib/met-api.mjs의 DEPARTMENT_IDS 참고).');
+      return;
+    }
+
+    console.log(`[generate-video] 선정: "${candidate.title}" — ${candidate.artistDisplayName} (${candidate.objectDate})`);
+
+    imagePath = path.join(WORK_DIR, 'original.jpg');
+    visionPath = path.join(WORK_DIR, 'vision.jpg');
+    const imageBuffer = await downloadImage(candidate.primaryImage);
+    fs.writeFileSync(imagePath, imageBuffer);
+    await makeVisionCopy(imagePath, visionPath);
+
+    console.log('[generate-video] Claude에게 그림을 보여주고 대본을 받는 중...');
+    try {
+      script = await generateVideoScript({
+        painting: candidate,
+        imageBufferForVision: fs.readFileSync(visionPath),
+        imageMediaType: 'image/jpeg',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.CLAUDE_MODEL,
+      });
+      painting = candidate;
+      break;
+    } catch (err) {
+      console.warn(`[generate-video] "${candidate.title}" 대본 생성 실패, 다른 그림으로 넘어갑니다: ${err.message}`);
+      usedList.push({
+        objectID: candidate.objectID,
+        title: candidate.title,
+        artistDisplayName: candidate.artistDisplayName,
+        skippedAt: new Date().toISOString(),
+        skipped: true,
+        reason: String(err.message).slice(0, 300),
+      });
+      saveUsed(usedList); // 같은 그림을 다음 실행에서 또 뽑지 않도록 바로 저장
+      fs.rmSync(imagePath, { force: true });
+      fs.rmSync(visionPath, { force: true });
+    }
   }
 
-  console.log(`[generate-video] 선정: "${painting.title}" — ${painting.artistDisplayName} (${painting.objectDate})`);
+  if (!painting) {
+    throw new Error(`${MAX_PAINTING_ATTEMPTS}개 그림을 시도했지만 모두 대본 생성에 실패했습니다.`);
+  }
 
-  const imagePath = path.join(WORK_DIR, 'original.jpg');
-  const visionPath = path.join(WORK_DIR, 'vision.jpg');
-  const imageBuffer = await downloadImage(painting.primaryImage);
-  fs.writeFileSync(imagePath, imageBuffer);
-  await makeVisionCopy(imagePath, visionPath);
-
-  console.log('[generate-video] Claude에게 그림을 보여주고 대본을 받는 중...');
-  const script = await generateVideoScript({
-    painting,
-    imageBufferForVision: fs.readFileSync(visionPath),
-    imageMediaType: 'image/jpeg',
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    model: process.env.CLAUDE_MODEL,
-  });
   console.log(`[generate-video] 대본 완성 — 세그먼트 ${script.segments.length}개, 제목: "${script.youtube.title}"`);
 
   console.log('[generate-video] 각 세그먼트 나레이션 오디오 생성 중 (Gemini TTS)...');
