@@ -66,3 +66,37 @@ export async function uploadVideo({
     studioUrl: `https://studio.youtube.com/video/${videoId}/edit`,
   };
 }
+
+/**
+ * 영상에는 자막을 굽지 않는 대신(폰트가 딱딱해 보인다는 피드백), SRT 파일을 별도의
+ * YouTube 자막(Closed Caption) 트랙으로 업로드합니다. 시청자가 CC를 켜면 유튜브
+ * 플레이어 자체 폰트/스타일로 자막이 나옵니다.
+ */
+export async function uploadCaptions({
+  videoId,
+  srtPath,
+  language = 'en',
+  name = 'English',
+  clientId,
+  clientSecret,
+  refreshToken,
+}) {
+  const auth = buildOAuthClient({ clientId, clientSecret, refreshToken });
+  const youtube = google.youtube({ version: 'v3', auth });
+
+  await youtube.captions.insert({
+    part: ['snippet'],
+    requestBody: {
+      snippet: {
+        videoId,
+        language,
+        name,
+        isDraft: false,
+      },
+    },
+    media: {
+      mimeType: 'application/x-subrip',
+      body: fs.createReadStream(srtPath),
+    },
+  });
+}

@@ -31,7 +31,12 @@ const oauth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_U
 const authUrl = oauth2Client.generateAuthUrl({
   access_type: 'offline', // refresh token을 받으려면 필수
   prompt: 'consent', // 이미 한 번 동의한 적이 있어도 refresh token을 다시 받기 위해 강제
-  scope: ['https://www.googleapis.com/auth/youtube.upload'],
+  // youtube.upload만으로는 영상 업로드는 되지만 자막(captions.insert) 업로드 권한이 없습니다.
+  // youtube.force-ssl을 추가해야 SRT 자막을 별도 트랙으로 올릴 수 있습니다.
+  scope: [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.force-ssl',
+  ],
 });
 
 console.log('\n아래 URL을 브라우저에서 열어 채널 소유 구글 계정으로 로그인/허용하세요:\n');

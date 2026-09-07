@@ -1,9 +1,7 @@
-name: Daily masterpiece short
+name: Generate masterpiece short
 
+# 자동 스케줄 없이, Actions 탭에서 "Run workflow"를 눌러 원할 때만 수동으로 실행합니다.
 on:
-  schedule:
-    # 매일 22:00 UTC (한국시간 오전 7시)
-    - cron: '0 22 * * *'
   workflow_dispatch: {}
 
 permissions:

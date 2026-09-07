@@ -59,9 +59,14 @@ function escapeDrawtextPath(p) {
 
 /**
  * 원본 그림 이미지에서 bbox 영역으로 크롭한 뒤 9:16으로 채우고, 은은한 Ken Burns
- * 줌 효과를 주고, 하단에 자막(narration)을 태워 넣은 세그먼트 영상(오디오 없음)을 만듭니다.
+ * 줌 효과를 준 세그먼트 영상(오디오 없음)을 만듭니다.
+ *
+ * 예전에는 여기서 drawtext로 나레이션 자막을 영상에 직접 태웠지만, 폰트가 딱딱해
+ * 보인다는 피드백에 따라 영상에는 자막을 굽지 않습니다. 대신 buildSrt()로 만든
+ * SRT 파일을 YouTube 자막(CC) 트랙으로 별도 업로드합니다 — youtube-upload.mjs의
+ * uploadCaptions() 참고. 시청자가 CC를 켜면 유튜브 플레이어 자체 폰트로 보입니다.
  */
-export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, durationSec, captionText, outPath }) {
+export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, durationSec, outPath }) {
   const cw = Math.max(2, Math.round(bbox.w * imgWidth));
   const ch = Math.max(2, Math.round(bbox.h * imgHeight));
   const cx = Math.min(imgWidth - cw, Math.max(0, Math.round(bbox.x * imgWidth)));
@@ -71,15 +76,11 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   const zoomIncrease = 0.1; // 클립 전체에 걸쳐 10% 확대
   const zoomStep = zoomIncrease / frames;
 
-  const captionFile = `${outPath}.caption.txt`;
-  fs.writeFileSync(captionFile, wrapText(captionText));
-
   const vf = [
     `crop=${cw}:${ch}:${cx}:${cy}`,
     `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase`,
     `crop=${WIDTH}:${HEIGHT}`,
     `zoompan=z='min(zoom+${zoomStep.toFixed(6)},${(1 + zoomIncrease).toFixed(3)})':d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
-    `drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:textfile=${escapeDrawtextPath(captionFile)}:fontsize=52:fontcolor=white:line_spacing=10:x=(w-text_w)/2:y=h-420:box=1:boxcolor=black@0.55:boxborderw=28`,
     'format=yuv420p',
   ].join(',');
 
@@ -94,7 +95,6 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
     outPath,
   ]);
 
-  fs.rmSync(captionFile, { force: true });
   return outPath;
 }
 
@@ -143,6 +143,36 @@ export async function buildTitleCard({ imagePath, lines, durationSec, outPath })
 const AUDIO_SAMPLE_RATE = 44100;
 const AUDIO_CHANNELS = 2;
 
+// 인트로 카드 길이 (초). assembleVideo()의 intro 클립과 buildSrt()의 자막 시작 시각
+// 계산 둘 다에서 이 값을 써서 서로 어긋나지 않게 합니다.
+const INTRO_DURATION_SEC = 2.5;
+
+function formatSrtTimestamp(totalSeconds) {
+  const ms = Math.max(0, Math.round(totalSeconds * 1000));
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const msec = ms % 1000;
+  const pad = (n, len = 2) => String(n).padStart(len, '0');
+  return `${pad(h)}:${pad(m)}:${pad(s)},${pad(msec, 3)}`;
+}
+
+/**
+ * 각 세그먼트의 나레이션 텍스트 + 재생 시간(durationSec)을 바탕으로 SRT 자막 파일
+ * 내용을 만듭니다. 인트로 카드 동안에는 나레이션이 없으므로 첫 세그먼트 자막은
+ * introDurationSec 이후부터 시작합니다.
+ */
+export function buildSrt(segments, introDurationSec = INTRO_DURATION_SEC) {
+  let t = introDurationSec;
+  const blocks = segments.map((seg, i) => {
+    const start = t;
+    const end = t + seg.durationSec;
+    t = end;
+    return `${i + 1}\n${formatSrtTimestamp(start)} --> ${formatSrtTimestamp(end)}\n${wrapText(seg.narration, 42)}\n`;
+  });
+  return blocks.join('\n');
+}
+
 export async function muxSegmentAudio({ videoPath, audioPath, outPath }) {
   await run('ffmpeg', [
     '-y',
@@ -180,8 +210,12 @@ export async function concatClips(clipPaths, outPath) {
 }
 
 /**
- * 전체 파이프라인: 세그먼트별 클립 생성 -> 오디오 합성 -> 인트로/아웃트로 -> 이어붙이기.
- * segments 각 항목은 { narration, bbox, audioPath, durationSec }를 가지고 있어야 합니다.
+ * 전체 파이프라인: 세그먼트별 클립 생성 -> 오디오 합성 -> 인트로/아웃트로 -> 이어붙이기
+ * -> SRT 자막 파일 생성. segments 각 항목은 { narration, bbox, audioPath, durationSec }를
+ * 가지고 있어야 합니다.
+ *
+ * @returns {{ finalPath: string, srtPath: string }} finalPath는 자막이 굽지 않은(burned-in
+ *   caption 없는) 영상이고, srtPath는 YouTube 자막(CC) 트랙으로 별도 업로드할 SRT 파일입니다.
  */
 export async function assembleVideo({ imagePath, segments, painting, workDir }) {
   fs.mkdirSync(workDir, { recursive: true });
@@ -193,7 +227,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
   await buildTitleCard({
     imagePath,
     lines: [painting.title, `${painting.artistDisplayName}${painting.objectDate ? ' · ' + painting.objectDate : ''}`],
-    durationSec: 2.5,
+    durationSec: INTRO_DURATION_SEC,
     outPath: introPath,
   });
   clipPaths.push(introPath);
@@ -209,7 +243,6 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
       imgHeight,
       bbox: seg.bbox,
       durationSec: seg.durationSec,
-      captionText: seg.narration,
       outPath: rawVideo,
     });
     await muxSegmentAudio({ videoPath: rawVideo, audioPath: seg.audioPath, outPath: finalSeg });
@@ -229,5 +262,8 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
   const finalPath = path.join(workDir, 'final.mp4');
   await concatClips(clipPaths, finalPath);
 
-  return finalPath;
+  const srtPath = path.join(workDir, 'captions.srt');
+  fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
+
+  return { finalPath, srtPath };
 }

@@ -1,28 +1,33 @@
 # Masterpiece Shorts — 명화 숏폼 자동화
 
-퍼블릭 도메인(저작권 만료) 명화를 하나 골라서, Claude가 그림을 직접 보고 "세부를 파고드는"
-나레이션 대본을 쓰고, Gemini가 그 대본을 음성으로 읽고, ffmpeg이 줌/팬 효과와 자막을 입힌
-9:16 숏폼 영상으로 조립한 뒤, YouTube에 **비공개(private)** 로 업로드하는 완전 자동 파이프라인입니다.
+퍼블릭 도메인(저작권 만료) 명화를 하나 골라서, Claude가 그림을 직접 보고 "숨은 의미를
+파고드는" 나레이션 대본을 쓰고, Gemini가 그 대본을 음성으로 읽고, ffmpeg이 줌/팬 효과를 입힌
+9:16 숏폼 영상으로 조립한 뒤, YouTube에 **비공개(private)** 로 업로드하는 파이프라인입니다.
+**GitHub Actions 자동 스케줄 없이, 만들고 싶을 때 수동으로 실행합니다.**
 
-**중요: 영상은 자동으로 "공개"되지 않습니다.** 매일 자동으로 만들어져서 비공개 상태로
-채널에 올라가고, 당신이 YouTube Studio에서 직접 확인한 뒤 공개로 전환해야 실제로
-사람들이 볼 수 있습니다 — 블로그 4개 프로젝트의 "자동 초안 + 사람 검수" 철학과 동일합니다.
+**중요: 영상은 자동으로 "공개"되지 않습니다.** 비공개 상태로 채널에 올라가고, 당신이
+YouTube Studio에서 직접 확인한 뒤 공개로 전환해야 실제로 사람들이 볼 수 있습니다 —
+블로그 4개 프로젝트의 "자동 초안 + 사람 검수" 철학과 동일합니다.
 
 ## 어떻게 작동하나요
 
-1. 매일 정해진 시간에 GitHub Actions(`daily-video.yml`)가 실행됩니다.
+1. 로컬(`npm run generate`)이나 GitHub Actions **Actions 탭 → Run workflow**로 원할
+   때마다 수동으로 실행합니다 (자동 스케줄 없음).
 2. 메트로폴리탄 미술관(Met) Open Access API에서, 아직 쓰지 않은 "하이라이트(대표작)"
    유화 중 하나를 무작위로 고릅니다. `isPublicDomain: true`인 작품만 사용합니다 (CC0, API 키 불필요).
 3. 그 그림 이미지를 Claude에게 실제로 보여주고, 진짜 그 그림에 있는 디테일(표정, 손,
-   배경, 상징물, 붓터치 등)을 근거로 6~9개 구간짜리 나레이션 대본과 각 구간이 확대할
-   영역(bbox)을 받습니다.
+   배경, 상징물, 붓터치 등)을 근거로 전체 소개 → 배경 설명 → 숨은 의미 reveal → 마무리
+   순서의 7~10개 구간짜리 나레이션 대본과 각 구간이 확대할 영역(bbox)을 받습니다.
 4. 각 구간의 나레이션을 Gemini TTS로 음성 변환합니다.
-5. ffmpeg으로 각 구간마다 해당 영역을 확대/팬(Ken Burns 효과)하고 자막을 태운 뒤,
-   인트로(제목 카드) + 본편 + 아웃트로(팔로우 유도 카드)를 이어 붙여 9:16 영상을 만듭니다.
-6. 완성된 영상을 YouTube에 **비공개**로 업로드합니다.
+5. ffmpeg으로 각 구간마다 해당 영역을 확대/팬(Ken Burns 효과)한 뒤, 인트로(제목 카드) +
+   본편 + 아웃트로(팔로우 유도 카드)를 이어 붙여 9:16 영상을 만듭니다. 영상에는 자막을
+   굽지 않습니다 — 대신 나레이션과 시간이 맞는 SRT 자막 파일을 만듭니다.
+6. 완성된 영상을 YouTube에 **비공개**로 업로드하고, 이어서 SRT 파일을 YouTube 자막(CC)
+   트랙으로 별도 업로드합니다 (시청자가 CC를 켜면 유튜브 플레이어 자체 폰트로 보입니다).
 7. 어떤 그림을 이미 썼는지(`data/used-paintings.json`)와 결과 기록(`data/log.md`)을
    저장소에 커밋해서, 같은 그림이 반복되지 않게 합니다.
-8. 당신이 YouTube Studio에서 영상을 확인 → 제목/설명 다듬고 싶으면 수정 → **공개로 전환**합니다.
+8. 당신이 YouTube Studio에서 영상을 확인 → 제목/설명/자막 다듬고 싶으면 수정 →
+   **공개로 전환**합니다.
 
 ## 시작하기 (처음 한 번만)
 
@@ -107,9 +112,9 @@ git push -u origin main
 "Read and write permissions"가 켜져 있는지 확인하세요.
 
 ### 7. 첫 실행 테스트
-저장소 **Actions 탭 → Daily masterpiece short → Run workflow**를 눌러 수동으로 한 번
-실행해보세요. 실행이 끝나면 로그 마지막 줄에 뜨는 YouTube Studio 링크로 들어가서
-결과를 확인하세요.
+저장소 **Actions 탭 → Generate masterpiece short → Run workflow**를 눌러 수동으로 한 번
+실행해보세요 (자동 스케줄은 없고, 만들고 싶을 때마다 이 버튼을 누르면 됩니다). 실행이
+끝나면 로그 마지막 줄에 뜨는 YouTube Studio 링크로 들어가서 결과를 확인하세요.
 
 ## 검수 후 공개하기
 
@@ -139,11 +144,11 @@ scripts/get-youtube-token.mjs   최초 1회 로컬 실행용 OAuth refresh token
 scripts/lib/met-api.mjs         메트로폴리탄 미술관 Open Access API
 scripts/lib/anthropic.mjs       Claude(vision)로 대본 생성
 scripts/lib/gemini-tts.mjs      Gemini TTS로 나레이션 음성 생성
-scripts/lib/video-builder.mjs   ffmpeg 기반 영상 조립 (줌/팬, 자막, 인트로/아웃트로)
-scripts/lib/youtube-upload.mjs  YouTube Data API v3 업로드
+scripts/lib/video-builder.mjs   ffmpeg 기반 영상 조립 (줌/팬, SRT 자막 생성, 인트로/아웃트로)
+scripts/lib/youtube-upload.mjs  YouTube Data API v3 업로드 (영상 + 자막(CC) 트랙)
 data/used-paintings.json        이미 쓴 그림 목록 (중복 방지, 자동 갱신)
 data/log.md                     생성된 영상 기록 (자동 갱신)
-.github/workflows/daily-video.yml  매일 실행되는 자동화
+.github/workflows/daily-video.yml  수동(workflow_dispatch)으로만 실행되는 워크플로
 ```
 
 ## 로컬에서 다시 테스트하기
