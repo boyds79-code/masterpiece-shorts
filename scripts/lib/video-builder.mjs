@@ -120,12 +120,19 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   return outPath;
 }
 
+// 타이틀 카드는 fontsize=58, WIDTH=1080px 기준으로 그립니다. drawtext는 자동
+// 줄바꿈을 지원하지 않아서, 긴 작품명/작가명(특히 "작가 · 연도"처럼 이어붙인 줄)이
+// 그대로 한 줄로 그려지면 text_w가 프레임 폭을 넘어서고, x=(w-text_w)/2가 음수가
+// 되면서 양쪽 끝이 잘려 보입니다 — 각 줄을 이 글자수 기준으로 먼저 감싸줍니다.
+const TITLE_CARD_MAX_CHARS_PER_LINE = 24;
+
 /**
  * 인트로/아웃트로용 타이틀 카드. 그림 전체를 어둡게 깔고 가운데(또는 하단)에 텍스트를 띄웁니다.
  */
 export async function buildTitleCard({ imagePath, lines, durationSec, outPath }) {
   const captionFile = `${outPath}.caption.txt`;
-  fs.writeFileSync(captionFile, lines.join('\n'));
+  const wrapped = lines.map((line) => wrapText(line, TITLE_CARD_MAX_CHARS_PER_LINE));
+  fs.writeFileSync(captionFile, wrapped.join('\n'));
 
   const vf = [
     `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase`,
