@@ -15,3 +15,7 @@
 | 2026-09-07 | Madonna and Child | Filippino Lippi | [QupUywAqZxw](https://studio.youtube.com/video/QupUywAqZxw/edit) |
 | 2026-09-07 | Lion (one of a pair) | Johann Gottlieb Kirchner | [nofBaB_0KmA](https://studio.youtube.com/video/nofBaB_0KmA/edit) |
 | 2026-09-07 | Madame de Wailly, née Adélaïde-Flore Belleville (1765–1838) | Augustin Pajou | [ye0ao0MkOWE](https://studio.youtube.com/video/ye0ao0MkOWE/edit) |
+| 2026-09-09 | Still Life with Apples and a Pot of Primroses | Paul Cézanne | [TMtfph41qfo](https://studio.youtube.com/video/TMtfph41qfo/edit) |
+| 2026-09-09 | Head of a Young Woman | Albrecht Dürer | [JigujBauAs0](https://studio.youtube.com/video/JigujBauAs0/edit) |
+| 2026-09-09 | Loggia of the Ducal Palace, Venice | John Ruskin | [0xCfFztlEhE](https://studio.youtube.com/video/0xCfFztlEhE/edit) |
+| 2026-09-09 | Saada, the Wife of Abraham Ben-Chimol, and Préciada, One of Their Daughters | Eugène Delacroix | [pq4lA1RvgO0](https://studio.youtube.com/video/pq4lA1RvgO0/edit) |
