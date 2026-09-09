@@ -14,3 +14,4 @@
 | 2026-09-07 | Queen Esther Approaching the Palace of Ahasuerus | Claude Lorrain (Claude Gellée) | [qD1AkINY8M0](https://studio.youtube.com/video/qD1AkINY8M0/edit) |
 | 2026-09-09 | Still Life with Apples and a Pot of Primroses | Paul Cézanne | [TMtfph41qfo](https://studio.youtube.com/video/TMtfph41qfo/edit) |
 | 2026-09-09 | Head of a Young Woman | Albrecht Dürer | [JigujBauAs0](https://studio.youtube.com/video/JigujBauAs0/edit) |
+| 2026-09-09 | Loggia of the Ducal Palace, Venice | John Ruskin | [0xCfFztlEhE](https://studio.youtube.com/video/0xCfFztlEhE/edit) |
