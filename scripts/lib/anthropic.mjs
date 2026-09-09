@@ -179,12 +179,70 @@ You must respond by calling the "submit_script" tool exactly once.`;
   const script = toolUse.input;
   validateAndClampScript(script);
 
+  for (const seg of script.segments) {
+    reconcileBboxWithGridPosition(seg);
+  }
+
   if (imagePath) {
     console.log('[anthropic] 각 구간의 확대 위치(bbox)가 실제로 맞는 디테일을 보여주는지 검증 중...');
     await verifyAndFixBboxes({ script, imagePath, imageMediaType, apiKey, model });
   }
 
   return script;
+}
+
+function isNearFullImageBbox(b) {
+  return b.w >= 0.9 && b.h >= 0.9;
+}
+
+// 3x3 그리드 라벨("top-left", "middle-center to middle-right" 등)을 x/y 비율 범위로
+// 해석합니다. 라벨에서 행/열 키워드를 하나도 못 찾으면(자유 형식 텍스트 등) null을
+// 반환해서 이 검사를 건너뛰게 합니다.
+function parseGridPosition(text) {
+  const t = (text || '').toLowerCase();
+  const cols = [];
+  if (/\bleft\b/.test(t)) cols.push([0, 1 / 3]);
+  if (/\bcenter\b/.test(t)) cols.push([1 / 3, 2 / 3]);
+  if (/\bright\b/.test(t)) cols.push([2 / 3, 1]);
+  const rows = [];
+  if (/\btop\b/.test(t)) rows.push([0, 1 / 3]);
+  if (/\bmiddle\b/.test(t)) rows.push([1 / 3, 2 / 3]);
+  if (/\bbottom\b/.test(t)) rows.push([2 / 3, 1]);
+  if (!cols.length || !rows.length) return null;
+
+  return {
+    colRange: [Math.min(...cols.map((c) => c[0])), Math.max(...cols.map((c) => c[1]))],
+    rowRange: [Math.min(...rows.map((r) => r[0])), Math.max(...rows.map((r) => r[1]))],
+  };
+}
+
+// Claude가 gridPosition은 (예) "top-left"라고 적어놓고 실제 bbox 숫자는 화면 반대편을
+// 가리키는 경우가 있습니다 — 시스템 프롬프트에서 둘을 맞춰보라고 지시하긴 하지만 항상
+// 지켜지지는 않습니다. 여기서는 API 호출 없이 코드로 즉시 확인해서, bbox 중심이 라벨이
+// 말하는 그리드 칸 밖에 있으면 같은 크기(w,h)를 유지한 채 중심을 그 칸 가운데로
+// 옮깁니다. "완전히 엉뚱한 곳"을 확대하는 가장 심한 사례를 API 검증 이전에 이미
+// 걸러내기 위한 무료 안전장치입니다.
+function reconcileBboxWithGridPosition(seg) {
+  const b = seg.bbox;
+  if (isNearFullImageBbox(b)) return; // IDENTIFY/CONTEXT/CLOSE는 검사 대상 아님
+
+  const grid = parseGridPosition(seg.gridPosition);
+  if (!grid) return;
+
+  const TOLERANCE = 0.05;
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const inCol = cx >= grid.colRange[0] - TOLERANCE && cx <= grid.colRange[1] + TOLERANCE;
+  const inRow = cy >= grid.rowRange[0] - TOLERANCE && cy <= grid.rowRange[1] + TOLERANCE;
+  if (inCol && inRow) return;
+
+  const before = { ...b };
+  const targetCx = (grid.colRange[0] + grid.colRange[1]) / 2;
+  const targetCy = (grid.rowRange[0] + grid.rowRange[1]) / 2;
+  seg.bbox = clampBbox({ x: targetCx - b.w / 2, y: targetCy - b.h / 2, w: b.w, h: b.h });
+  console.log(
+    `[anthropic]   gridPosition("${seg.gridPosition}")과 bbox 불일치 감지, 좌표 보정: "${seg.focus}" ${JSON.stringify(before)} -> ${JSON.stringify(seg.bbox)}`
+  );
 }
 
 // Claude가 지시를 완벽히 안 지켰을 경우를 대비한 안전장치 — bbox를 이미지 범위 안으로
@@ -213,100 +271,114 @@ You must respond by calling "confirm_or_fix_bbox" exactly once.`;
 // 검증합니다. 예: 나레이션은 다람쥐를 가리키는데 bbox는 사람 손 부분을 확대하는 식의
 // 오류(모델이 위치를 잘못 짚는 흔한 실수)를 잡기 위한 단계입니다. 전체 화면을 쓰는
 // IDENTIFY/CONTEXT/CLOSE 세그먼트는 애초에 틀릴 여지가 없으니 건너뜁니다.
+// 한 번 "틀렸다"고 판정된 bbox에 대해 모델이 내놓는 첫 보정값도 틀릴 수 있습니다
+// (같은 종류의 좌표 추정 실수를 반복하는 경우가 흔함). 보정 후 재검증 없이 그냥
+// 받아들이면 "고쳤다고 생각했는데 여전히 엉뚱한 곳"이 나올 수 있어서, 보정된 bbox를
+// 다시 크롭해서 한 번 더 확인하는 것까지 총 MAX_VERIFY_ATTEMPTS번 반복합니다.
+const MAX_VERIFY_ATTEMPTS = 3;
+
 async function verifyAndFixBboxes({ script, imagePath, imageMediaType, apiKey, model }) {
   const { width: imgWidth, height: imgHeight } = await getImageDimensions(imagePath);
   const fullImageBase64 = fs.readFileSync(imagePath).toString('base64');
 
   for (const seg of script.segments) {
-    const b = seg.bbox;
-    const isNearFullImage = b.w >= 0.9 && b.h >= 0.9;
-    if (isNearFullImage) continue;
+    if (isNearFullImageBbox(seg.bbox)) continue;
 
-    const cropPath = path.join(os.tmpdir(), `bbox-check-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
-    try {
-      await cropStill({ imagePath, bbox: b, imgWidth, imgHeight, outPath: cropPath });
-      const cropBase64 = fs.readFileSync(cropPath).toString('base64');
+    for (let attempt = 1; attempt <= MAX_VERIFY_ATTEMPTS; attempt++) {
+      const b = seg.bbox;
+      const cropPath = path.join(os.tmpdir(), `bbox-check-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+      try {
+        await cropStill({ imagePath, bbox: b, imgWidth, imgHeight, outPath: cropPath });
+        const cropBase64 = fs.readFileSync(cropPath).toString('base64');
 
-      const body = {
-        model: model || DEFAULT_MODEL,
-        max_tokens: 1024,
-        system: VERIFY_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Full painting, for reference:' },
-              { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: fullImageBase64 } },
-              {
-                type: 'text',
-                text: `Cropped preview currently selected for this segment. Focus: "${seg.focus}". Narration: "${seg.narration}". Current bbox: x=${b.x.toFixed(3)}, y=${b.y.toFixed(3)}, w=${b.w.toFixed(3)}, h=${b.h.toFixed(3)}.`,
-              },
-              { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: cropBase64 } },
-              { type: 'text', text: 'Does the cropped preview correctly show the described detail? Confirm or fix the bbox.' },
-            ],
-          },
-        ],
-        tools: [
-          {
-            name: 'confirm_or_fix_bbox',
-            description: 'Confirm the current crop is correct, or provide a corrected bbox.',
-            input_schema: {
-              type: 'object',
-              properties: {
-                matches: { type: 'boolean' },
-                bbox: {
-                  type: 'object',
-                  properties: {
-                    x: { type: 'number' },
-                    y: { type: 'number' },
-                    w: { type: 'number' },
-                    h: { type: 'number' },
-                  },
-                  required: ['x', 'y', 'w', 'h'],
+        const body = {
+          model: model || DEFAULT_MODEL,
+          max_tokens: 1024,
+          system: VERIFY_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Full painting, for reference:' },
+                { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: fullImageBase64 } },
+                {
+                  type: 'text',
+                  text: `Cropped preview currently selected for this segment. Focus: "${seg.focus}". Narration: "${seg.narration}". Current bbox: x=${b.x.toFixed(3)}, y=${b.y.toFixed(3)}, w=${b.w.toFixed(3)}, h=${b.h.toFixed(3)}.`,
                 },
-              },
-              required: ['matches', 'bbox'],
+                { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: cropBase64 } },
+                { type: 'text', text: 'Does the cropped preview correctly show the described detail? Confirm or fix the bbox.' },
+              ],
             },
+          ],
+          tools: [
+            {
+              name: 'confirm_or_fix_bbox',
+              description: 'Confirm the current crop is correct, or provide a corrected bbox.',
+              input_schema: {
+                type: 'object',
+                properties: {
+                  matches: { type: 'boolean' },
+                  bbox: {
+                    type: 'object',
+                    properties: {
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                      w: { type: 'number' },
+                      h: { type: 'number' },
+                    },
+                    required: ['x', 'y', 'w', 'h'],
+                  },
+                },
+                required: ['matches', 'bbox'],
+              },
+            },
+          ],
+          tool_choice: { type: 'tool', name: 'confirm_or_fix_bbox' },
+        };
+
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
           },
-        ],
-        tool_choice: { type: 'tool', name: 'confirm_or_fix_bbox' },
-      };
+          body: JSON.stringify(body),
+        });
 
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(body),
-      });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`bbox 검증 API 호출 실패 (${res.status}): ${text}`);
+        }
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`bbox 검증 API 호출 실패 (${res.status}): ${text}`);
-      }
+        const data = await res.json();
+        const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'confirm_or_fix_bbox');
+        if (!toolUse) {
+          throw new Error('검증 응답에서 confirm_or_fix_bbox tool 호출을 찾지 못했습니다.');
+        }
 
-      const data = await res.json();
-      const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'confirm_or_fix_bbox');
-      if (!toolUse) {
-        throw new Error('검증 응답에서 confirm_or_fix_bbox tool 호출을 찾지 못했습니다.');
-      }
+        const result = toolUse.input;
+        const fixed = clampBbox(result.bbox);
 
-      const result = toolUse.input;
-      const fixed = clampBbox(result.bbox);
-      if (result.matches === false) {
+        if (result.matches !== false) {
+          seg.bbox = fixed;
+          break; // 통과 — 이 세그먼트는 더 이상 재확인할 필요 없음
+        }
+
         console.log(
-          `[anthropic]   bbox 보정: "${seg.focus}" ${JSON.stringify(b)} -> ${JSON.stringify(fixed)}`
+          `[anthropic]   bbox 보정 (시도 ${attempt}/${MAX_VERIFY_ATTEMPTS}): "${seg.focus}" ${JSON.stringify(b)} -> ${JSON.stringify(fixed)}`
         );
+        seg.bbox = fixed;
+        // matches:false면 다음 attempt에서 이 새 bbox를 다시 크롭해서 재확인합니다.
+        // 마지막 attempt까지 계속 틀리면 그냥 마지막 보정값을 채택하고 넘어갑니다.
+      } catch (err) {
+        // 검증 자체가 실패해도(네트워크/레이트리밋 등) 원래 bbox를 그대로 쓰고 넘어갑니다 —
+        // 전체 파이프라인을 죽일 이유는 아닙니다.
+        console.warn(`[anthropic]   bbox 검증 실패, 원래 값 유지 ("${seg.focus}"): ${err.message}`);
+        break;
+      } finally {
+        fs.rmSync(cropPath, { force: true });
       }
-      seg.bbox = fixed;
-    } catch (err) {
-      // 검증 자체가 실패해도(네트워크/레이트리밋 등) 원래 bbox를 그대로 쓰고 넘어갑니다 —
-      // 전체 파이프라인을 죽일 이유는 아닙니다.
-      console.warn(`[anthropic]   bbox 검증 실패, 원래 값 유지 ("${seg.focus}"): ${err.message}`);
-    } finally {
-      fs.rmSync(cropPath, { force: true });
     }
   }
 }
