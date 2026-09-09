@@ -63,11 +63,6 @@
     "videoId": "nofBaB_0KmA"
   },
   {
-    "objectID": 201895,
-    "title": "Madame de Wailly, née Adélaïde-Flore Belleville (1765–1838)",
-    "artistDisplayName": "Augustin Pajou",
-    "usedAt": "2026-09-07T15:08:10.554Z",
-    "videoId": "ye0ao0MkOWE",
     "objectID": 435882,
     "title": "Still Life with Apples and a Pot of Primroses",
     "artistDisplayName": "Paul Cézanne",
@@ -94,5 +89,12 @@
     "artistDisplayName": "Eugène Delacroix",
     "usedAt": "2026-09-09T04:21:41.036Z",
     "videoId": "pq4lA1RvgO0"
+  },
+  {
+    "objectID": 255275,
+    "title": "Marble female figure",
+    "artistDisplayName": "Bastis Master",
+    "usedAt": "2026-09-09T04:48:07.401Z",
+    "videoId": "sLawxOidiSE"
   }
 ]

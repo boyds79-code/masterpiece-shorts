@@ -19,3 +19,4 @@
 | 2026-09-09 | Head of a Young Woman | Albrecht Dürer | [JigujBauAs0](https://studio.youtube.com/video/JigujBauAs0/edit) |
 | 2026-09-09 | Loggia of the Ducal Palace, Venice | John Ruskin | [0xCfFztlEhE](https://studio.youtube.com/video/0xCfFztlEhE/edit) |
 | 2026-09-09 | Saada, the Wife of Abraham Ben-Chimol, and Préciada, One of Their Daughters | Eugène Delacroix | [pq4lA1RvgO0](https://studio.youtube.com/video/pq4lA1RvgO0/edit) |
+| 2026-09-09 | Marble female figure | Bastis Master | [sLawxOidiSE](https://studio.youtube.com/video/sLawxOidiSE/edit) |
