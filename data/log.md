@@ -13,3 +13,4 @@
 | 2026-09-07 | The union of architecture, sculpture, and painting; exemplified by a series of illustrations, with descriptive accounts of the house and galleries of John Soane ... / by John Britton | John Britton | [60IJnyq55DE](https://studio.youtube.com/video/60IJnyq55DE/edit) |
 | 2026-09-07 | Queen Esther Approaching the Palace of Ahasuerus | Claude Lorrain (Claude Gellée) | [qD1AkINY8M0](https://studio.youtube.com/video/qD1AkINY8M0/edit) |
 | 2026-09-09 | Still Life with Apples and a Pot of Primroses | Paul Cézanne | [TMtfph41qfo](https://studio.youtube.com/video/TMtfph41qfo/edit) |
+| 2026-09-09 | Head of a Young Woman | Albrecht Dürer | [JigujBauAs0](https://studio.youtube.com/video/JigujBauAs0/edit) |
