@@ -22,3 +22,4 @@
 | 2026-09-09 | Marble female figure | Bastis Master | [sLawxOidiSE](https://studio.youtube.com/video/sLawxOidiSE/edit) |
 | 2026-09-09 | Oedipus and the Sphinx | Gustave Moreau | [lzwvBuDznT4](https://studio.youtube.com/video/lzwvBuDznT4/edit) |
 | 2026-09-09 | "The Eavesdropper", Folio 47r from a Haft Paikar (Seven Portraits) of the Khamsa (Quintet) of Nizami of Ganja | Maulana Azhar | [4EHvhbWDFTI](https://studio.youtube.com/video/4EHvhbWDFTI/edit) |
+| 2026-09-09 | The Dance Class | Edgar Degas | [5S_h1LQvbfw](https://studio.youtube.com/video/5S_h1LQvbfw/edit) |
