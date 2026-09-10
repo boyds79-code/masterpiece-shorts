@@ -142,21 +142,25 @@ git push -u origin main
 scripts/generate-video.mjs      "숨은 의미" 파이프라인 (그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드)
 scripts/generate-process-video.mjs  "제작 과정 상상 재현"("그리는 방법") 파이프라인 (아래 별도 섹션 참고)
 scripts/generate-duo-video.mjs  그림 하나로 위 두 쇼츠(그리는 방법 + 숨은 의미)를 짝지어 만드는 오케스트레이터
+scripts/generate-longform-video.mjs 그림 하나로 긴 영상 1개 + 그 영상에서 발췌한 티저 쇼츠 2개를 만드는 오케스트레이터
 scripts/get-youtube-token.mjs   최초 1회 로컬 실행용 OAuth refresh token 발급 스크립트
 scripts/lib/met-api.mjs         메트로폴리탄 미술관 Open Access API
 scripts/lib/anthropic.mjs       Claude(vision)로 "숨은 의미" 대본 생성 + 그림 적합성 사전 심사
 scripts/lib/process-script.mjs  Claude(vision)로 "제작 과정 상상"("그리는 방법") 대본 생성
+scripts/lib/longform-script.mjs Claude(vision)로 긴 영상용 통합 대본(WHEN+WHY+HOW+숨은 의미 10세그먼트) 생성
 scripts/lib/gemini-tts.mjs      Gemini TTS로 나레이션 음성 생성
 scripts/lib/gemini-image.mjs    Gemini 이미지 생성으로 스케치/밑칠 단계 이미지 생성
 scripts/lib/video-builder.mjs   ffmpeg 기반 영상 조립 (줌/팬, SRT 자막 생성, 인트로/아웃트로)
 scripts/lib/youtube-upload.mjs  YouTube Data API v3 업로드 (영상 + 자막(CC) 트랙)
-data/used-paintings.json        "숨은 의미"/"제작 과정" 두 형식이 함께 쓰는 그림 선정 목록(중복 방지) —
-                                 그림 하나가 어느 한쪽에서든 이미 쓰였으면 양쪽 모두에서 제외됩니다.
+data/used-paintings.json        모든 파이프라인이 함께 쓰는 그림 선정 목록(중복 방지) —
+                                 그림 하나가 어느 한쪽에서든 이미 쓰였으면 다른 모든 파이프라인에서 제외됩니다.
 data/log.md                     "숨은 의미" 영상 생성 기록 (자동 갱신)
 data/log-process.md             "제작 과정 상상 재현" 영상 생성 기록 (자동 갱신)
+data/log-longform.md            "긴 영상 + 티저 쇼츠 2개" 생성 기록 (자동 갱신)
 .github/workflows/daily-video.yml   수동(workflow_dispatch)으로만 실행되는 "숨은 의미" 단독 워크플로
 .github/workflows/process-video.yml 수동(workflow_dispatch)으로만 실행되는 "제작 과정 상상 재현" 단독 워크플로
 .github/workflows/duo-video.yml     수동(workflow_dispatch)으로만 실행 — 그림 하나로 두 쇼츠를 함께 생성
+.github/workflows/longform-video.yml 수동(workflow_dispatch)으로만 실행 — 긴 영상 1개 + 티저 쇼츠 2개를 함께 생성
 ```
 
 ## "제작 과정 상상 재현"("그리는 방법") 영상 (별도 파이프라인)
@@ -251,6 +255,68 @@ YouTube에 비공개로 업로드하는 오케스트레이터입니다 (`scripts
 npm run generate:duo
 ```
 또는 저장소 **Actions 탭 → Generate masterpiece duo shorts (process + hidden meaning) →
+Run workflow**.
+
+## 긴 영상 + 티저 쇼츠 2개 만들기 (long-form + shorts teasers)
+
+`generate-duo-video.mjs`("짝지어 만들기")는 같은 그림에 대해 서로 **독립적인, 각자 온전한
+길이의 쇼츠 두 개**를 만듭니다. 이 파이프라인(`scripts/generate-longform-video.mjs`)은
+그것과 다른 목적을 가진 별도의 오케스트레이터로, **긴 영상 하나(3분 이상, WHEN+WHY+HOW+
+숨은 의미를 모두 담은 완결된 이야기) + 그 긴 영상에서 그대로 발췌한 짧은 티저 쇼츠 두 개**를
+만듭니다. 검색으로 채널에 들어오는 사람은 적고, 대부분 쇼츠를 우연히 보고 채널을
+발견하기 때문에 — 그 쇼츠를 보고 관심이 생긴 사람이 같은 그림을 다룬 긴 영상을 찾아볼 수
+있게 유도하는 것이 목적입니다.
+
+**왜 대본을 하나만 만드나요?** 세 결과물(긴 영상 + 티저 2개)이 서로 다른 이야기를 하면
+안 되고, 같은 "하나의 완결된 설명"에서 구간만 다르게 잘라 써야 합니다. 그래서
+`scripts/lib/longform-script.mjs`는 세그먼트 10개짜리 대본을 딱 하나만 만들고
+(identify → reference → sketch/underpainting/refine → reveal×4 → finish), 실제로 어떤
+세그먼트를 어떻게 잘라 쓰는지는 `video-builder.mjs`의 `assembleLongformBundle()`이
+결정합니다:
+- **긴 영상** = 10개 세그먼트 전부 (인트로/아웃트로 카드 포함, 3분 이상)
+- **"그리는 방법" 티저** = sketch/underpainting/refine 3개 세그먼트만 (전용 인트로/아웃트로)
+- **"숨은 의미" 티저** = reveal 4개 세그먼트만 (전용 인트로/아웃트로)
+
+세그먼트별 영상 클립(줌/타임랩스 + 나레이션 오디오 합성)은 딱 한 번씩만 만들어서 세
+결과물이 나눠 재사용합니다 — 같은 그림을 세 번씩 중복 렌더링하지 않습니다.
+
+**⚠️ 알아둘 점: 쇼츠에서 긴 영상으로 가는 클릭 가능한 링크는 만들 수 없습니다.** 유튜브는
+2023년 8월부터 쇼츠의 설명란과 댓글에서 클릭 가능한 링크를 막았고, YouTube Data API로는
+댓글 고정이나 최종 화면(end screen)/카드 추가도 지원하지 않습니다 — 둘 다 YouTube Studio
+안에서 직접 조작해야만 되는 기능이라 자동화할 수 없습니다. 그래서 이 파이프라인은 링크
+대신, **긴 영상의 정확한 제목을 두 티저의 아웃트로 화면에 텍스트로 못박아 둡니다** (예:
+`Full story on this channel: "..."`) — 쇼츠를 본 사람이 그 제목을 기억하거나 캡처해서
+채널에서 검색해 찾아보도록 유도하는 방식입니다. 같은 문구를 설명란에도 넣어두지만, 쇼츠는
+설명란을 잘 안 읽는 경우가 많으므로 화면 텍스트가 핵심 장치입니다. 이 화면 CTA 문구가
+실제로 검색 가능한 정확한 문자열이 되도록, 긴 영상의 최종(고지 문구 포함) 업로드 제목을
+먼저 확정한 뒤 그 문자열을 그대로 두 티저 조립에 넘깁니다.
+
+**작동 방식**
+1. Met에서 아직 어느 형식으로도 안 쓴 그림을 하나 고르고, "숨은 의미" 쪽 적합성 심사
+   (다인물/서사/상징 밀도)를 통과하는지 먼저 확인합니다 (숨은 의미 리빌 4개를 포함하기
+   때문에 이 심사를 재사용합니다).
+2. Claude에게 그림을 보여주고 10개 세그먼트짜리 통합 대본 + 긴 영상/두 티저 각각의
+   YouTube 제목·설명·태그를 한 번에 받습니다. 각 세그먼트의 나레이션은 "이전 세그먼트를
+   언급하지 않고 그 자체로 완결되도록" 강제됩니다 — 티저가 몇 개 세그먼트만 잘라내도
+   어색하지 않아야 하기 때문입니다.
+3. sketch/underpainting/refine 3단계의 진행 컷 이미지를 Gemini로 체이닝 생성하고
+   (`process-script.mjs`와 동일한 방식), 10개 세그먼트 전체의 나레이션을 Gemini TTS로
+   음성 변환합니다.
+4. `assembleLongformBundle()`이 세그먼트 클립을 한 번씩만 만들어서 긴 영상 + 티저 2개를
+   조립합니다.
+5. 세 영상을 모두 YouTube에 비공개로 업로드합니다. 긴 영상과 "그리는 방법" 티저는 AI가
+   생성한 이미지를 담고 있으므로 `containsSyntheticMedia`를 켜고, 제목/설명에
+   "제작 과정 상상 재현" 파이프라인과 동일한 고지 문구를 자동으로 붙입니다. "숨은 의미"
+   티저는 실사진만 쓰므로 이 고지가 필요 없습니다.
+6. 그림 하나에 대해 영상 ID 3개(`videoIdFull`, `videoIdProcessShort`, `videoIdMeaningShort`)를
+   모두 기록한 항목 하나를 `data/used-paintings.json`에 남기고, `data/log-longform.md`에
+   한 줄을 추가합니다.
+
+**실행 방법**
+```bash
+npm run generate:longform
+```
+또는 저장소 **Actions 탭 → Generate masterpiece longform video + teaser shorts →
 Run workflow**.
 
 ## 로컬에서 다시 테스트하기

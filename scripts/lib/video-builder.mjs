@@ -572,3 +572,158 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
 
   return { finalPath, srtPath, thumbnailPath };
 }
+
+// 티저 쇼츠 전용 인트로/아웃트로 카드 길이(초). 긴 영상의 INTRO_DURATION_SEC(2.5초)과 굳이
+// 다르게 둘 이유는 없어서 인트로는 그대로 재사용하지만, 아웃트로는 "긴 영상 제목을 화면에서
+// 읽고 기억할 시간"이 더 필요하므로 조금 더 길게(4초) 잡습니다.
+const LONGFORM_TEASER_OUTRO_DURATION_SEC = 4;
+
+/**
+ * 그림 하나에 대해 만든 "긴 영상 대본"(scripts/lib/longform-script.mjs의
+ * generateLongformScript, 10개 세그먼트) 하나로부터 세 개의 완성된 영상을 조립합니다:
+ *   1. full — 긴 영상(10개 세그먼트 전부, 3분 이상)
+ *   2. processTeaser — "그리는 방법" 쇼츠(sketch/underpainting/refine 3개 세그먼트만)
+ *   3. meaningTeaser — "숨은 의미" 쇼츠(reveal 4개 세그먼트만)
+ *
+ * 핵심 설계: 세그먼트별 영상 클립(줌/타임랩스 + 나레이션 오디오 합성)은 딱 한 번씩만
+ * 만들고, 그 결과물을 세 조립 결과가 나눠서 재사용합니다 — 같은 그림을 대상으로 ffmpeg
+ * 렌더링을 세 번씩 중복해서 돌릴 필요가 없습니다.
+ *
+ * 유튜브 쇼츠는 설명란/댓글에 클릭 가능한 링크를 넣을 수 없고 Data API로는 최종 화면(end
+ * screen)/카드도 지원하지 않으므로, 두 티저 모두 아웃트로 카드에 긴 영상의 정확한 제목을
+ * 화면 텍스트로 못박아 둡니다(titles.full) — 쇼츠를 우연히 본 사람이 그 제목으로 채널을
+ * 검색해서 긴 영상을 찾아볼 수 있게 하기 위해서입니다. 이게 이 함수가 존재하는 핵심 이유이며,
+ * 호출자(generate-longform-video.mjs)는 titles.full에 실제로 유튜브에 업로드될 최종 제목
+ * (고지 문구 등을 이미 다 붙인 상태)을 그대로 넘겨야 화면 문구와 실제 검색 결과가 어긋나지
+ * 않습니다.
+ *
+ * @param {object} params
+ * @param {string} params.finishedImagePath - 완성작 원본 사진 경로 (실사진 세그먼트와
+ *   인트로/아웃트로/썸네일 배경으로 씀).
+ * @param {Array} params.segments - 정확히 10개, longform-script.mjs가 만든 순서(identify,
+ *   reference, sketch, underpainting, refine, reveal x4, finish)를 그대로 유지해야 합니다.
+ *   각 항목은 { narration, audioPath, durationSec, imagePaths, bbox? }를 가지고 있어야
+ *   합니다 — imagePaths는 실사진 세그먼트면 [finishedImagePath] 1장, 생성 이미지
+ *   세그먼트(sketch/underpainting/refine)면 진행 컷 여러 장(steps 개수만큼)이어야 하고,
+ *   bbox는 imagePaths가 1장일 때만 의미가 있습니다(process-video.mjs의 관례와 동일).
+ * @param {object} params.painting - Met API의 object 응답(title, artistDisplayName, objectDate).
+ * @param {{ full: string, processTeaser: string, meaningTeaser: string }} params.titles -
+ *   화면 카드/썸네일에 쓸 최종 제목 문자열 3종. full은 두 티저의 아웃트로 CTA에도 그대로
+ *   노출되므로, 실제 유튜브 업로드 제목과 완전히 같은 문자열이어야 합니다.
+ * @param {string} params.workDir
+ * @returns {Promise<{
+ *   full: { finalPath: string, srtPath: string, thumbnailPath: string },
+ *   processTeaser: { finalPath: string, srtPath: string, thumbnailPath: string },
+ *   meaningTeaser: { finalPath: string, srtPath: string, thumbnailPath: string },
+ * }>}
+ */
+export async function assembleLongformBundle({ finishedImagePath, segments, painting, titles, workDir }) {
+  if (!Array.isArray(segments) || segments.length !== 10) {
+    throw new Error(`assembleLongformBundle은 정확히 10개의 segments가 필요한데 ${segments?.length}개를 받았습니다.`);
+  }
+
+  fs.mkdirSync(workDir, { recursive: true });
+  const segmentsDir = path.join(workDir, 'segments');
+  fs.mkdirSync(segmentsDir, { recursive: true });
+
+  const artistLine = `${painting.artistDisplayName}${painting.objectDate ? ' · ' + painting.objectDate : ''}`;
+
+  // 1) 세그먼트별 클립(줌/타임랩스 + 나레이션 오디오)을 딱 한 번씩 만들어 둡니다. 이후
+  // full/processTeaser/meaningTeaser 세 조립 모두 여기서 만든 파일들을 인덱스로 골라
+  // 재사용하기만 합니다.
+  const segClipPaths = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const rawVideo = path.join(segmentsDir, `seg-${i}-video.mp4`);
+    const finalSeg = path.join(segmentsDir, `seg-${i}-final.mp4`);
+
+    if (seg.imagePaths.length > 1) {
+      await buildTimelapseSegmentClip({
+        imagePaths: seg.imagePaths,
+        durationSec: seg.durationSec,
+        outPath: rawVideo,
+      });
+    } else {
+      const bbox = seg.bbox || { x: 0, y: 0, w: 1, h: 1 };
+      const { width: imgWidth, height: imgHeight } = await getImageDimensions(seg.imagePaths[0]);
+      await buildSegmentClip({
+        imagePath: seg.imagePaths[0],
+        imgWidth,
+        imgHeight,
+        bbox,
+        durationSec: seg.durationSec,
+        outPath: rawVideo,
+      });
+    }
+    await muxSegmentAudio({ videoPath: rawVideo, audioPath: seg.audioPath, outPath: finalSeg });
+    fs.rmSync(rawVideo, { force: true });
+    segClipPaths.push(finalSeg);
+  }
+
+  // 2) 세 결과물을 각각 조립하는 공용 헬퍼. introLines/outroLines가 없으면(티저 아웃트로처럼
+  // 문구만 다른 경우) 호출부에서 매번 다르게 넘깁니다.
+  async function buildOutput({ name, introLines, introDurationSec, segmentIndices, outroLines, outroDurationSec, thumbnailTitle, thumbnailBadge }) {
+    const outDir = path.join(workDir, name);
+    fs.mkdirSync(outDir, { recursive: true });
+
+    const introPath = path.join(outDir, 'intro.mp4');
+    await buildTitleCard({ imagePath: finishedImagePath, lines: introLines, durationSec: introDurationSec, outPath: introPath });
+
+    const outroPath = path.join(outDir, 'outro.mp4');
+    await buildTitleCard({ imagePath: finishedImagePath, lines: outroLines, durationSec: outroDurationSec, outPath: outroPath });
+
+    const clipPaths = [introPath, ...segmentIndices.map((i) => segClipPaths[i]), outroPath];
+    const finalPath = path.join(outDir, 'final.mp4');
+    await concatClips(clipPaths, finalPath);
+
+    const subsetSegments = segmentIndices.map((i) => segments[i]);
+    const srtPath = path.join(outDir, 'captions.srt');
+    fs.writeFileSync(srtPath, buildSrt(subsetSegments, introDurationSec));
+
+    const thumbnailPath = path.join(outDir, 'thumbnail.jpg');
+    await buildThumbnail({ imagePath: finishedImagePath, title: thumbnailTitle, badgeText: thumbnailBadge, outPath: thumbnailPath });
+
+    return { finalPath, srtPath, thumbnailPath };
+  }
+
+  // 3) full — 10개 세그먼트 전부. 인트로에 "AI가 상상한 제작 과정을 포함합니다" 고지를
+  // 넣어서, 재생 시작부터 이 영상 일부가 추정 재구성임을 화면에서부터 알 수 있게 합니다.
+  const full = await buildOutput({
+    name: 'full',
+    introLines: [painting.title, artistLine, 'Includes an AI-imagined creation process'],
+    introDurationSec: INTRO_DURATION_SEC,
+    segmentIndices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+    outroLines: ['Follow for more hidden stories', 'behind famous paintings.'],
+    outroDurationSec: 3,
+    thumbnailTitle: titles.full,
+    thumbnailBadge: 'FULL STORY',
+  });
+
+  // 4) processTeaser — sketch(2)/underpainting(3)/refine(4) 세그먼트만. 아웃트로에 긴 영상의
+  // 정확한 제목을 화면 텍스트로 고정 노출합니다(클릭 가능한 링크를 쇼츠에 넣을 수 없으므로).
+  const processTeaser = await buildOutput({
+    name: 'process-teaser',
+    introLines: [painting.title, 'How was this painted?', 'AI-Imagined Creation Process'],
+    introDurationSec: INTRO_DURATION_SEC,
+    segmentIndices: [2, 3, 4],
+    outroLines: ['Full story on this channel:', `"${titles.full}"`],
+    outroDurationSec: LONGFORM_TEASER_OUTRO_DURATION_SEC,
+    thumbnailTitle: titles.processTeaser,
+    thumbnailBadge: 'HOW IT WAS PAINTED',
+  });
+
+  // 5) meaningTeaser — reveal 4개(5,6,7,8) 세그먼트만. 아웃트로는 processTeaser와 동일한
+  // CTA 문구(같은 긴 영상을 가리킴)를 씁니다.
+  const meaningTeaser = await buildOutput({
+    name: 'meaning-teaser',
+    introLines: [painting.title, "What's hidden inside?"],
+    introDurationSec: INTRO_DURATION_SEC,
+    segmentIndices: [5, 6, 7, 8],
+    outroLines: ['Full story on this channel:', `"${titles.full}"`],
+    outroDurationSec: LONGFORM_TEASER_OUTRO_DURATION_SEC,
+    thumbnailTitle: titles.meaningTeaser,
+    thumbnailBadge: 'HIDDEN MEANING',
+  });
+
+  return { full, processTeaser, meaningTeaser };
+}
