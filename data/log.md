@@ -27,3 +27,4 @@
 | 2026-09-10 | Amitabha and Kshitigarba | Unidentified artist | [m_87EqZJ7Ys](https://studio.youtube.com/video/m_87EqZJ7Ys/edit) |
 | 2026-09-10 | Portrait of Nicolás Matías Fernández Méndez | José Campeche | [GtU2EWCiEd8](https://studio.youtube.com/video/GtU2EWCiEd8/edit) |
 | 2026-09-10 | Juan de Pareja (ca. 1608–1670) | Velázquez (Diego Rodríguez de Silva y Velázquez) | [rrBZ5tGOpE0](https://studio.youtube.com/video/rrBZ5tGOpE0/edit) |
+| 2026-09-10 | Diana and Actaeon | Bartholomeus Spranger | [udu2JCW0uEg](https://studio.youtube.com/video/udu2JCW0uEg/edit) |
