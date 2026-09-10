@@ -9,14 +9,22 @@ import { API_URL, DEFAULT_MODEL, clampBbox, isNearFullImageBbox, reconcileBboxWi
  * 카드)에서 강제로 붙이는 건 이 함수를 호출하는 쪽(generate-process-video.mjs)의 책임입니다 —
  * Claude의 서술에만 의존하면 매번 빠짐없이 지켜진다는 보장이 없기 때문입니다.
  *
- * 세그먼트는 정해진 순서를 따릅니다:
+ * 아무 근거 없이 매번 똑같은 "스케치 -> 색칠 -> 완성" 패턴으로 흘러가지 않도록, 대본을 쓰기
+ * 전에 먼저 "techniqueBasis"라는 필드로 이 그림에 실제로 알려진 근거(메타데이터의 매체 —
+ * 예: 유화/템페라, 그리고 작가/시대가 속한 화파의 잘 알려진 제작 관행 — 예: 인상파의 알라
+ * 프리마 직접 채색, 르네상스 패널화의 밑그림 전사 후 글레이징 등)를 먼저 명시하게 하고,
+ * sketch/underpainting/refine 단계와 그 imagePrompt가 이 근거를 따르도록 강제합니다.
+ *
+ * 세그먼트는 정해진 순서를 따르고(총 6개), 인트로/아웃트로 카드(약 5.5초)를 더하면 전체
+ * 영상이 유튜브 쇼츠에 맞는 1~2분 사이가 되도록 나레이션 분량을 조정합니다:
  * 1. identify (실제 사진, 전체 화면): 완성작이 무엇인지 소개.
  * 2. reference (실제 사진, 전체 또는 특정 부분 확대): 작가가 이 장면/구도를 그리기 위해 무엇을
  *    관찰/참고했을지 상상.
- * 3~4. sketch, underpainting (각각 AI가 새로 생성한 이미지): 초기 스케치 단계, 밑칠/명암
- *    구축 단계를 상상해서 묘사. 이 두 세그먼트는 imagePrompt를 함께 받아 Gemini 이미지
- *    생성에 그대로 사용합니다.
- * 5. refine (AI가 새로 생성한, 완성 직전 단계 이미지, 선택적): 세부 묘사/글레이징 단계.
+ * 3~4. sketch, underpainting (각각 AI가 새로 생성한 이미지): techniqueBasis에 따른 초기
+ *    스케치(또는 화파에 따라 밑그림 없이 바로 채색을 시작하는 방식) 단계, 밑칠/명암 구축
+ *    단계를 상상해서 묘사. 이 두 세그먼트는 imagePrompt를 함께 받아 Gemini 이미지 생성에
+ *    그대로 사용합니다.
+ * 5. refine (AI가 새로 생성한, 완성 직전 단계 이미지): 세부 묘사/글레이징 단계.
  * 6. finish (실제 사진, 전체 화면): 완성작으로 돌아와 변화를 되짚으며 마무리.
  */
 export async function generateProcessScript({ painting, imageBufferForVision, imageMediaType, apiKey, model }) {
@@ -45,26 +53,28 @@ CRITICAL — honesty about speculation: Never assert invented specific facts as 
 
 You will be shown the actual finished painting plus its museum metadata. Look closely at real, visible qualities — visible brushwork texture, layering, edges (hard vs. soft), evidence of underdrawing showing through thin paint, palette choices, compositional structure — and build the imagined process around what these visible clues suggest, not generic filler that could apply to any painting.
 
-Structure the script as exactly 6 segments, in exactly this order and stage type:
+STEP 1 — ground the reconstruction in real, documented technique before writing anything else. Write "techniqueBasis": 2-3 sentences naming (a) the actual medium given in the metadata below (e.g., "oil on canvas", "tempera on wood, gold ground"), (b) the specific art-historical movement or period this artist/work belongs to (identify it from the artist name, date, and the painting's visible style — this is well-established art history, state it plainly), and (c) that movement's real, well-known technique convention for HOW paintings were typically built up (concrete examples: Impressionists like Monet or Renoir typically painted alla prima — direct, wet-into-wet color application with little or no detailed underdrawing; Northern Renaissance and Early Netherlandish oil painters typically built up thin, transparent glazes over a detailed underdrawing often transferred from a cartoon; Baroque painters such as Rembrandt or Caravaggio typically worked from a dark toned ground upward, building impasto highlights over shadow; Neo-Impressionists/Pointillists applied small distinct dots or dashes of pure, unmixed color; egg tempera panel painters built up fine hatched strokes over an underdrawing). If you cannot confidently identify a specific movement, default to the most standard, well-documented technique for that general medium and era, and say so honestly (e.g., "oil paintings of this general period typically..."). Every later stage — especially "sketch", "underpainting", and their imagePrompts — MUST follow logically from what you state here, not a generic one-size-fits-all process. In particular: if the documented convention for this artist/movement is to skip a careful drawn underdrawing (as with many Impressionists working alla prima), say so and adjust the "sketch" stage to describe a loose, rough color gesture-sketch directly on the canvas instead of a graphite/charcoal drawing — don't force a pencil-sketch stage onto an artist not known to have worked that way.
+
+STEP 2 — structure the script as exactly 6 segments, in exactly this order and stage type, consistent with the techniqueBasis you just stated:
 1. stage "identify" (usesGeneratedImage: false, bbox = the whole painting): Introduce the finished painting — title, artist, rough year. End with a hook promising to reconstruct how it might have come together, stroke by stroke.
-2. stage "reference" (usesGeneratedImage: false, bbox = whole painting or a specific real detail): Imagine what the artist likely observed, studied, or referenced to build this composition (a live model, a study of natural light, a religious/mythological source text, preliminary drawings, a specific setting) — grounded in what the finished image actually shows.
-3. stage "sketch" (usesGeneratedImage: true): Describe the imagined initial composition sketch — how the major shapes, figures, and structure were likely blocked in first, loosely, before any color. Also write "imagePrompt": a detailed prompt for an AI image model to redraw this exact composition as a loose, unfinished pencil/charcoal underdrawing sketch (same framing, same major shapes, no color, visible construction lines) — the prompt must explicitly ask the model to preserve the same composition/subject positions as the reference image it will be shown.
-4. stage "underpainting" (usesGeneratedImage: true): Describe the imagined tonal/color block-in stage — establishing light and shadow masses or a monochrome/limited-palette underpainting before detail work. Write an "imagePrompt" asking for the same composition rendered as a rough, flat-toned underpainting (blocked-in color masses, no fine detail, visible unfinished edges), preserving the same composition as the reference image.
-5. stage "refine" (usesGeneratedImage: true): Describe the imagined final push — layering glazes, sharpening edges, adding the fine details that make the painting feel alive. Write an "imagePrompt" asking for a near-final version of the same composition: mostly finished but with a few areas still visibly rough or unglazed, preserving the same composition as the reference image.
-6. stage "finish" (usesGeneratedImage: false, bbox = the whole painting): Pull back to the real finished painting. Reflect on the transformation from rough sketch to finished work, then close with a light line reinforcing that this was an imagined reconstruction, not a documented record (e.g., "That's our best guess at how it came together — nobody alive watched them paint it.").
+2. stage "reference" (usesGeneratedImage: false, bbox = whole painting or a specific real detail): Imagine what the artist likely observed, studied, or referenced to build this composition (a live model, a study of natural light, a religious/mythological source text, preliminary drawings, a specific setting) — grounded in what the finished image actually shows and in the techniqueBasis.
+3. stage "sketch" (usesGeneratedImage: true): Describe the imagined initial stage consistent with techniqueBasis — either a loosely blocked-in drawn underdrawing (for artists/movements known to work that way) or a rough gestural color block-in with no drawn stage (for artists/movements known to paint alla prima, skipping a formal underdrawing). Also write "imagePrompt": a detailed prompt for an AI image model to redraw this exact composition in that specific early stage (same framing, same major shapes/subject positions as the reference image it will be shown) — name the actual technique in the prompt (e.g., "loose charcoal underdrawing" vs. "rough alla-prima color block-in with visible loose brushstrokes, no pencil lines").
+4. stage "underpainting" (usesGeneratedImage: true): Describe the imagined tonal/color block-in stage consistent with techniqueBasis — e.g., a monochrome grisaille underpainting for a glazing-based technique, or a direct rough color mass block-in for alla prima work. Write an "imagePrompt" asking for the same composition rendered at that stage (no fine detail, visible unfinished edges), naming the specific technique, preserving the same composition as the reference image.
+5. stage "refine" (usesGeneratedImage: true): Describe the imagined final push consistent with techniqueBasis — layering transparent glazes and sharpening edges for a glazing technique, or adding thicker impasto highlights and final direct strokes for an alla-prima/impasto technique. Write an "imagePrompt" asking for a near-final version of the same composition: mostly finished but with a few areas still visibly rough or unfinished, naming the specific technique, preserving the same composition as the reference image.
+6. stage "finish" (usesGeneratedImage: false, bbox = the whole painting): Pull back to the real finished painting. Reflect on the transformation from the early stage to finished work, then close with a light line reinforcing that this was an imagined reconstruction grounded in known technique, not a documented record (e.g., "That's our best guess, built on how [movement] painters actually worked — nobody alive watched them paint it.").
 
 For every segment:
-- "narration": ONE to THREE short sentences, natural spoken chunks, no references to "earlier" segments.
+- "narration": TWO to FOUR short sentences, natural spoken chunks, no references to "earlier" segments. At least one segment among sketch/underpainting/refine should naturally mention the real technique term from techniqueBasis (e.g., "alla prima", "glazing", "grisaille underpainting") so the reconstruction reads as informed, not generic.
 - "focus": short 3-6 word label describing what's shown.
 - For "identify"/"reference"/"finish" segments (usesGeneratedImage: false): also provide "gridPosition" (3x3 grid label, e.g. "top-left") and "bbox" (x,y,w,h as fractions 0-1, x+w<=1, y+h<=1, w>=0.12, h>=0.12). "identify" and "finish" must use approximately the full image (x:0,y:0,w:1,h:1 or very close). "reference" may use a specific real detail's region if that better supports the narration, or the full image if the observation is about the whole scene.
 - For "sketch"/"underpainting"/"refine" segments (usesGeneratedImage: true): provide "imagePrompt" as described above, and omit bbox/gridPosition (or set bbox to the full image as a placeholder — it will be ignored).
 
-Narration total length across all 6 segments: roughly 140-200 words total.
+Narration total length across all 6 segments: roughly 170-260 words total (this becomes roughly 70-110 seconds of spoken narration). Combined with the fixed ~5.5-second intro/outro title cards, the finished video should land in the 1-2 minute range that works well for YouTube Shorts — do not go noticeably short of this range.
 Tone: curious and speculative but confident in craft knowledge — like a painter-friend walking you through how they'd guess this was built, not a dry textbook.
 
 - Write a scroll-stopping YouTube Shorts title (under 80 characters — a fixed disclosure suffix will be appended by our system, so leave room) that promises to reveal how the painting might have been made, naming the painting and/or artist.
 - Write a YouTube description: 2-4 sentences about the painting and what the imagined process reconstruction shows, written in a way that is honest this is a speculative recreation.
-- Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art technique terms (e.g. "underpainting", "art process", "painting technique"), and general discovery terms (e.g. "art history", "how paintings are made", "famous paintings").
+- Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art technique terms (e.g. "underpainting", "art process", "painting technique", the actual movement name), and general discovery terms (e.g. "art history", "how paintings are made", "famous paintings").
 
 You must respond by calling the "submit_process_script" tool exactly once.`;
 
@@ -98,6 +108,10 @@ You must respond by calling the "submit_process_script" tool exactly once.`;
         input_schema: {
           type: 'object',
           properties: {
+            techniqueBasis: {
+              type: 'string',
+              description: 'Real documented medium + art-historical movement/period + that movement\'s known technique convention this reconstruction is grounded in.',
+            },
             youtube: {
               type: 'object',
               properties: {
@@ -135,7 +149,7 @@ You must respond by calling the "submit_process_script" tool exactly once.`;
               },
             },
           },
-          required: ['youtube', 'segments'],
+          required: ['techniqueBasis', 'youtube', 'segments'],
         },
       },
     ],
@@ -180,6 +194,9 @@ const EXPECTED_STAGE_ORDER = ['identify', 'reference', 'sketch', 'underpainting'
 function validateAndClampProcessScript(script) {
   if (!Array.isArray(script.segments) || script.segments.length === 0) {
     throw Object.assign(new Error('Claude가 segments를 비워서 반환했습니다.'), { code: 'CONTENT_REFUSAL' });
+  }
+  if (!script.techniqueBasis || !script.techniqueBasis.trim()) {
+    throw new Error('techniqueBasis가 비어 있습니다 — 제작 과정의 근거(매체/화파/기법)가 없으면 진행하지 않습니다.');
   }
   if (script.segments.length !== 6) {
     throw new Error(`segments가 정확히 6개여야 하는데 ${script.segments.length}개가 반환되었습니다.`);

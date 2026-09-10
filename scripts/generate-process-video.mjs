@@ -73,9 +73,10 @@ function buildFinalTitle(claudeTitle) {
   return `${base}${DISCLOSURE_TITLE_SUFFIX}`;
 }
 
-function buildFinalDescription(claudeDescription) {
+function buildFinalDescription(claudeDescription, techniqueBasis) {
+  const techniqueLine = techniqueBasis ? `\n\nTechnique basis for this reconstruction: ${techniqueBasis}` : '';
   return (
-    `${DISCLOSURE_PARAGRAPH}\n\n${claudeDescription}\n\n` +
+    `${DISCLOSURE_PARAGRAPH}\n\n${claudeDescription}${techniqueLine}\n\n` +
     'Finished painting image: public domain, via The Metropolitan Museum of Art (metmuseum.org), CC0.'
   );
 }
@@ -157,6 +158,7 @@ export async function generateOneProcessVideo() {
   }
 
   console.log(`[generate-process] 대본 완성 — 제목: "${script.youtube.title}"`);
+  console.log(`[generate-process] 근거(techniqueBasis): ${script.techniqueBasis}`);
 
   let uploadResult;
   try {
@@ -212,7 +214,7 @@ export async function generateOneProcessVideo() {
     uploadResult = await uploadVideo({
       filePath: finalVideoPath,
       title: buildFinalTitle(script.youtube.title),
-      description: buildFinalDescription(script.youtube.description),
+      description: buildFinalDescription(script.youtube.description, script.techniqueBasis),
       tags: script.youtube.tags,
       privacyStatus,
       containsSyntheticMedia: true,
