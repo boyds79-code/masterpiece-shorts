@@ -162,26 +162,49 @@ export async function generateOneProcessVideo() {
 
   let uploadResult;
   try {
-    console.log('[generate-process] AI로 스케치/밑칠/마무리 직전 단계 이미지를 생성하는 중 (Gemini)...');
+    console.log('[generate-process] AI로 스케치/밑칠/마무리 직전 단계의 진행 컷들을 순서대로 생성하는 중 (Gemini)...');
     const visionBuffer = fs.readFileSync(visionPath);
+    const FINAL_TARGET_LABEL =
+      'Reference A — the finished painting (the final target this reconstruction should lead toward). Preserve this exact composition and subject positions throughout.';
+    const PREVIOUS_STEP_LABEL =
+      'Reference B — the current progress state from the immediately previous step. Continue building on THIS image incrementally — do not restart from scratch or revert progress already made.';
+
+    // 전체 파이프라인에 걸쳐 하나로 이어지는 체이닝입니다 — sketch의 마지막 컷이
+    // underpainting의 첫 컷으로, underpainting의 마지막 컷이 refine의 첫 컷으로 그대로
+    // 이어집니다 (스테이지가 바뀐다고 새로 시작하지 않음). 완성작(visionBuffer)은 항상
+    // 함께 참고 이미지로 줘서 스타일/구도가 드리프트하지 않게 붙잡아둡니다.
+    let previousStepBuffer = null;
+    let previousStepMediaType = null;
+
     for (let i = 0; i < script.segments.length; i++) {
       const seg = script.segments[i];
       if (!seg.usesGeneratedImage) {
         // 실제 사진 세그먼트(identify/reference/finish)는 원본 고화질 이미지를 그대로 씁니다.
-        seg.imagePath = imagePath;
+        seg.imagePaths = [imagePath];
         continue;
       }
-      const stagePath = path.join(workDir, `seg-${i}-stage-${seg.stage}.png`);
-      await generateStageImage({
-        referenceImageBuffer: visionBuffer,
-        referenceMediaType: 'image/jpeg',
-        prompt: seg.imagePrompt,
-        apiKey: process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_IMAGE_MODEL,
-        outPath: stagePath,
-      });
-      seg.imagePath = stagePath;
-      console.log(`[generate-process]   "${seg.stage}" 단계 이미지 생성 완료`);
+
+      const stepPaths = [];
+      for (let s = 0; s < seg.steps.length; s++) {
+        const referenceImages = [{ buffer: visionBuffer, mediaType: 'image/jpeg', label: FINAL_TARGET_LABEL }];
+        if (previousStepBuffer) {
+          referenceImages.push({ buffer: previousStepBuffer, mediaType: previousStepMediaType, label: PREVIOUS_STEP_LABEL });
+        }
+
+        const stepPath = path.join(workDir, `seg-${i}-${seg.stage}-step-${s}.png`);
+        const result = await generateStageImage({
+          referenceImages,
+          prompt: seg.steps[s],
+          apiKey: process.env.GEMINI_API_KEY,
+          model: process.env.GEMINI_IMAGE_MODEL,
+          outPath: stepPath,
+        });
+        stepPaths.push(result.path);
+        previousStepBuffer = fs.readFileSync(result.path);
+        previousStepMediaType = result.mediaType;
+      }
+      seg.imagePaths = stepPaths;
+      console.log(`[generate-process]   "${seg.stage}" 단계 진행 컷 ${stepPaths.length}개 생성 완료`);
     }
 
     console.log('[generate-process] 각 세그먼트 나레이션 오디오 생성 중 (Gemini TTS)...');

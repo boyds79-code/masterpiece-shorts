@@ -120,6 +120,69 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   return outPath;
 }
 
+// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 빠른 디졸브(크로스페이드)로 이어붙여서
+// "타임랩스처럼 조금씩 완성되어가는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을
+// Ken Burns 줌으로 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼 durationSec을
+// 나눠서 각각 짧게 보여주고 XFADE_DUR초짜리 디졸브로 넘어갑니다. 이미지가 1장뿐이면
+// (예외적인 경우 대비) 크로스페이드 없이 buildSegmentClip과 동일하게 전체 화면을
+// 그대로 durationSec만큼 보여줍니다.
+//
+// N장, 클립 하나당 길이 L, 디졸브 X초일 때 최종 길이는 N*L - (N-1)*X입니다 — durationSec을
+// 정확히 맞추려면 L = (durationSec + (N-1)*X) / N. (직접 합성 테스트로 오차 0초 확인됨.)
+const TIMELAPSE_XFADE_SEC = 0.4;
+
+export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
+  const n = imagePaths.length;
+
+  if (n === 1) {
+    const { width, height } = await getImageDimensions(imagePaths[0]);
+    return buildSegmentClip({
+      imagePath: imagePaths[0],
+      imgWidth: width,
+      imgHeight: height,
+      bbox: { x: 0, y: 0, w: 1, h: 1 },
+      durationSec,
+      outPath,
+    });
+  }
+
+  // durationSec이 아주 짧을 때 xfadeDur이 clip 길이보다 커지지 않도록 방어합니다.
+  const xfadeDur = Math.min(TIMELAPSE_XFADE_SEC, durationSec / n / 2);
+  const perClipLen = (durationSec + (n - 1) * xfadeDur) / n;
+
+  const inputArgs = [];
+  const filterParts = [];
+
+  for (let i = 0; i < n; i++) {
+    inputArgs.push('-loop', '1', '-t', perClipLen.toFixed(3), '-i', imagePaths[i]);
+    filterParts.push(
+      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1[v${i}]`
+    );
+  }
+
+  let lastLabel = 'v0';
+  for (let i = 1; i < n; i++) {
+    const outLabel = i === n - 1 ? 'vout' : `vx${i}`;
+    const offset = i * (perClipLen - xfadeDur);
+    filterParts.push(
+      `[${lastLabel}][v${i}]xfade=transition=fade:duration=${xfadeDur.toFixed(3)}:offset=${offset.toFixed(3)}[${outLabel}]`
+    );
+    lastLabel = outLabel;
+  }
+
+  await run('ffmpeg', [
+    '-y',
+    ...inputArgs,
+    '-filter_complex', filterParts.join(';'),
+    '-map', '[vout]',
+    '-an',
+    '-r', String(FPS),
+    outPath,
+  ]);
+
+  return outPath;
+}
+
 // 타이틀 카드는 fontsize=58, WIDTH=1080px 기준으로 그립니다. drawtext는 자동
 // 줄바꿈을 지원하지 않아서, 긴 작품명/작가명(특히 "작가 · 연도"처럼 이어붙인 줄)이
 // 그대로 한 줄로 그려지면 text_w가 프레임 폭을 넘어서고, x=(w-text_w)/2가 음수가
@@ -331,8 +394,13 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
 /**
  * "제작 과정 상상 재현" 영상 전용 조립 함수. 기존 assembleVideo()와 달리 세그먼트마다
  * 서로 다른 이미지(실제 사진 또는 AI가 생성한 스케치/밑칠/마무리 직전 단계 이미지)를 쓸 수
- * 있습니다. segments 각 항목은 { narration, audioPath, durationSec, imagePath, bbox }를
- * 가지고 있어야 합니다 — bbox가 없으면 전체 화면(x:0,y:0,w:1,h:1)으로 간주합니다.
+ * 있습니다. segments 각 항목은 { narration, audioPath, durationSec, imagePaths, bbox }를
+ * 가지고 있어야 합니다:
+ * - imagePaths: 이 세그먼트에서 보여줄 이미지 경로 배열. 실사진 세그먼트(identify/reference/
+ *   finish)는 보통 1장(원본 사진)이라 buildSegmentClip()으로 bbox Ken Burns 줌을 적용합니다.
+ *   생성 이미지 세그먼트(sketch/underpainting/refine)는 여러 장(진행 컷)이라
+ *   buildTimelapseSegmentClip()으로 빠른 디졸브 타임랩스를 적용합니다.
+ * - bbox: imagePaths가 1장일 때만 의미가 있고, 없으면 전체 화면(x:0,y:0,w:1,h:1)으로 간주합니다.
  *
  * 인트로 카드에는 "AI-Imagined Creation Process"라는 문구를 항상 고정으로 넣어서, 이 영상이
  * 실제 제작 기록이 아니라 AI가 상상으로 재구성한 것임을 시청자가 나레이션을 듣기도 전에
@@ -360,20 +428,27 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
-    const bbox = seg.bbox || { x: 0, y: 0, w: 1, h: 1 };
-    const { width: imgWidth, height: imgHeight } = await getImageDimensions(seg.imagePath);
-
     const rawVideo = path.join(workDir, `seg-${i}-video.mp4`);
     const finalSeg = path.join(workDir, `seg-${i}-final.mp4`);
 
-    await buildSegmentClip({
-      imagePath: seg.imagePath,
-      imgWidth,
-      imgHeight,
-      bbox,
-      durationSec: seg.durationSec,
-      outPath: rawVideo,
-    });
+    if (seg.imagePaths.length > 1) {
+      await buildTimelapseSegmentClip({
+        imagePaths: seg.imagePaths,
+        durationSec: seg.durationSec,
+        outPath: rawVideo,
+      });
+    } else {
+      const bbox = seg.bbox || { x: 0, y: 0, w: 1, h: 1 };
+      const { width: imgWidth, height: imgHeight } = await getImageDimensions(seg.imagePaths[0]);
+      await buildSegmentClip({
+        imagePath: seg.imagePaths[0],
+        imgWidth,
+        imgHeight,
+        bbox,
+        durationSec: seg.durationSec,
+        outPath: rawVideo,
+      });
+    }
     await muxSegmentAudio({ videoPath: rawVideo, audioPath: seg.audioPath, outPath: finalSeg });
     fs.rmSync(rawVideo, { force: true });
     clipPaths.push(finalSeg);
