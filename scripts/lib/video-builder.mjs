@@ -121,21 +121,49 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
 }
 
 // 여러 장의 이미지(예: 스케치 진행 컷 3장)를 이어붙여서 "실제로 붓으로 칠해지고 있는 것처럼
-// 빠르게 색이 채워지는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을 Ken Burns 줌으로
-// 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼 durationSec을 나눠서 각각 짧게
-// 보여주고 XFADE_DUR초짜리 전환으로 넘어갑니다. 이미지가 1장뿐이면(예외적인 경우 대비)
-// 전환 없이 buildSegmentClip과 동일하게 전체 화면을 그대로 durationSec만큼 보여줍니다.
+// 화면 전체에서 색이 조금씩 번져나가는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을
+// Ken Burns 줌으로 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼 durationSec을 N등분해서
+// 슬롯 0은 첫 이미지를 정지 화면으로 보여주고, 슬롯 1..N-1은 각각 "이전 이미지 -> 이번 이미지"를
+// 슬롯 전체 길이 동안 계속 붓으로 칠해나가는 것처럼 전환합니다(짧게 반짝하고 끝나는 크로스디졸브가
+// 아니라, 그 구간 내내 서서히 칠해집니다). 이미지가 1장뿐이면(예외적인 경우 대비) 전환 없이
+// buildSegmentClip과 동일하게 전체 화면을 그대로 durationSec만큼 보여줍니다.
 //
-// 전환 종류는 일반적인 "fade"(알파 크로스디졸브)를 쓰지 않습니다 — fade는 두 이미지가
-// 반투명하게 겹쳐 보이는 "이중 노출"처럼 보여서 실제로 붓으로 칠하는 느낌이 나지 않습니다.
-// 대신 "dissolve"(픽셀 단위로 무작위 순서에 따라 하나씩 새 이미지로 교체되는 전환)를 써서,
-// 물감이 캔버스 위에 흩뿌려지듯 번져가는 느낌에 더 가깝게 만듭니다. 전환 시간도 짧게 줘서
-// ("빠르게 칠해지는" 느낌) 전환 자체가 오래 끌리지 않게 합니다.
+// 전환 방식은 알파 크로스디졸브(fade)나 픽셀 단위 완전 무작위 교체(dissolve)를 쓰지 않습니다 —
+// 둘 다 "이중 노출"이나 "TV 잡음"처럼 보여서 실제 붓터치로 칠해지는 느낌이 나지 않습니다. 대신
+// 매번 새로 생성하는 "붓결 순서 필드"(그레이스케일 이미지 한 장 — 저해상도 무작위 노이즈를
+// 확대하고 가로로 길게 블러를 줘서 실제 붓자국처럼 얼룩덜룩하고 가로로 늘어진 무늬를 만듦)를
+// 기준으로, 그 값이 낮은 픽셀부터 먼저 새 이미지로 바뀌도록 합니다. 진행률(0→1)이 올라가면서
+// 문턱값을 올려가며 "붓자국 무늬를 따라 페인트가 번지고 뭉쳐가며 캔버스를 덮어나가는" 모습이
+// 됩니다(직접 합성 테스트로 확인됨 — 무작위 점 흩뿌림이 아니라 얼룩진 붓자국 형태로 새 색이
+// 번져 들어가는 게 눈으로 확인됨).
 //
-// N장, 클립 하나당 길이 L, 전환 X초일 때 최종 길이는 N*L - (N-1)*X입니다 — durationSec을
-// 정확히 맞추려면 L = (durationSec + (N-1)*X) / N. (직접 합성 테스트로 오차 0초 확인됨.)
-const TIMELAPSE_XFADE_SEC = 0.25;
-const TIMELAPSE_TRANSITION = 'dissolve';
+// N장이면 슬롯은 N개, 슬롯 하나당 길이는 정확히 durationSec/N이고 겹치는 구간이 없으므로
+// 최종 길이는 정확히 durationSec입니다(크로스페이드처럼 겹침을 빼는 보정이 필요 없음).
+const BRUSH_FEATHER = 40; // 문턱값 경계를 얼마나 부드럽게(그레이스케일 단계 폭) 만들지
+const BRUSH_FIELD_COLS = 18; // 붓결 순서 필드를 만들 때 쓰는 저해상도 그리드(가로) — 작을수록 얼룩이 큼
+const BRUSH_FIELD_ROWS = 32; // 저해상도 그리드(세로)
+
+// 저해상도 무작위 노이즈를 만든 뒤 확대 + 가로로 길게 블러를 줘서, 실제 붓자국처럼 얼룩덜룩하고
+// 가로로 늘어진 그레이스케일 "순서 필드"를 생성합니다. 매번 다른 seed로 새로 생성해서 매
+// 세그먼트마다 무늬가 달라지게 합니다.
+async function generateBrushOrderField({ outPath, seed }) {
+  const lowResPath = `${outPath}.lowres.png`;
+  await run('ffmpeg', [
+    '-y',
+    '-f', 'lavfi',
+    '-i', `color=size=${BRUSH_FIELD_COLS}x${BRUSH_FIELD_ROWS}:d=1,geq=lum='random(X+Y*${BRUSH_FIELD_COLS}+${seed}*99991)*255':cb=128:cr=128,format=gray`,
+    '-frames:v', '1',
+    lowResPath,
+  ]);
+  await run('ffmpeg', [
+    '-y',
+    '-i', lowResPath,
+    '-vf', `scale=${WIDTH}:${HEIGHT}:flags=bicubic,avgblur=sizeX=60:sizeY=10,gblur=sigma=8,eq=contrast=2.2`,
+    outPath,
+  ]);
+  await fs.promises.unlink(lowResPath).catch(() => {});
+  return outPath;
+}
 
 export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
   const n = imagePaths.length;
@@ -152,29 +180,57 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
     });
   }
 
-  // durationSec이 아주 짧을 때 xfadeDur이 clip 길이보다 커지지 않도록 방어합니다.
-  const xfadeDur = Math.min(TIMELAPSE_XFADE_SEC, durationSec / n / 2);
-  const perClipLen = (durationSec + (n - 1) * xfadeDur) / n;
+  const perSlot = durationSec / n;
+  const orderFieldPath = `${outPath}.orderfield.png`;
+  await generateBrushOrderField({ outPath: orderFieldPath, seed: Math.floor(Math.random() * 1e6) });
 
   const inputArgs = [];
-  const filterParts = [];
-
   for (let i = 0; i < n; i++) {
-    inputArgs.push('-loop', '1', '-t', perClipLen.toFixed(3), '-i', imagePaths[i]);
-    filterParts.push(
-      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1[v${i}]`
-    );
+    inputArgs.push('-loop', '1', '-t', perSlot.toFixed(3), '-i', imagePaths[i]);
+  }
+  const orderFieldInputIdx = n;
+  inputArgs.push('-loop', '1', '-t', perSlot.toFixed(3), '-i', orderFieldPath);
+
+  const filterParts = [];
+  for (let i = 0; i < n; i++) {
+    // 슬롯 0의 첫 이미지(정지 화면)와, 뒤이은 전환의 "이전 이미지" 입력으로 각각 한 번씩
+    // 쓰이므로(마지막 이미지 제외) split으로 복제해둡니다.
+    const needsTwoCopies = i < n - 1;
+    if (needsTwoCopies) {
+      filterParts.push(
+        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1,split=2[img${i}held][img${i}prev]`
+      );
+    } else {
+      filterParts.push(
+        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1[img${i}held]`
+      );
+    }
   }
 
-  let lastLabel = 'v0';
-  for (let i = 1; i < n; i++) {
-    const outLabel = i === n - 1 ? 'vout' : `vx${i}`;
-    const offset = i * (perClipLen - xfadeDur);
-    filterParts.push(
-      `[${lastLabel}][v${i}]xfade=transition=${TIMELAPSE_TRANSITION}:duration=${xfadeDur.toFixed(3)}:offset=${offset.toFixed(3)}[${outLabel}]`
-    );
-    lastLabel = outLabel;
+  const numTransitions = n - 1;
+  filterParts.push(`[${orderFieldInputIdx}:v]scale=${WIDTH}:${HEIGHT},fps=${FPS},format=gray[ordbase]`);
+  if (numTransitions > 1) {
+    const splitLabels = Array.from({ length: numTransitions }, (_, i) => `[ord${i}]`).join('');
+    filterParts.push(`[ordbase]split=${numTransitions}${splitLabels}`);
+  } else {
+    filterParts.push(`[ordbase]copy[ord0]`);
   }
+
+  const slotLabels = [`img0held`];
+  for (let i = 1; i < n; i++) {
+    const prevLabel = `img${i - 1}prev`;
+    const currLabel = `img${i}held`;
+    const maskRaw = `ord${i - 1}`;
+    const maskLabel = `mask${i}`;
+    filterParts.push(
+      `[${maskRaw}]geq=lum='clip((255*T/${perSlot.toFixed(3)} - lum(X,Y) + ${BRUSH_FEATHER / 2})*(255/${BRUSH_FEATHER}),0,255)',format=gray[${maskLabel}]`
+    );
+    filterParts.push(`[${prevLabel}][${currLabel}][${maskLabel}]maskedmerge[slot${i}]`);
+    slotLabels.push(`slot${i}`);
+  }
+
+  const concatInputs = slotLabels.map((l) => `[${l}]`).join('');
+  filterParts.push(`${concatInputs}concat=n=${n}:v=1:a=0[vout]`);
 
   await run('ffmpeg', [
     '-y',
@@ -185,6 +241,8 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
     '-r', String(FPS),
     outPath,
   ]);
+
+  await fs.promises.unlink(orderFieldPath).catch(() => {});
 
   return outPath;
 }
