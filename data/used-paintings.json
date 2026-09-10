@@ -159,5 +159,35 @@
     "artistDisplayName": "Jean-Léon Gérôme",
     "usedAt": "2026-09-10T04:03:43.123Z",
     "videoId": "yiYeguCDZ9U"
+  },
+  {
+    "objectID": 310073,
+    "title": "Grere'o (shield)",
+    "artistDisplayName": "Solomon Islands artist",
+    "skippedAt": "2026-09-10T09:18:00.119Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 3] This is not a painting but an Indigenous Australian funeral/memorial pole (likely a hollow log coffin or lorrkkon). While it has 3 stylized figures (one large central figure and two smaller faces at the bottom), the geometric patterns are primarily decorative/cultural design el"
+  },
+  {
+    "objectID": 36451,
+    "title": "Illustrated manuscript of the Lotus Sutra, Volume 2",
+    "artistDisplayName": "Unidentified artist",
+    "usedAt": "2026-09-10T09:25:04.789Z",
+    "videoId": "lmPqsD3pqUI"
+  },
+  {
+    "objectID": 591858,
+    "title": "Diaries of Samuel P. Avery",
+    "artistDisplayName": "Samuel Putnam Avery Sr.",
+    "skippedAt": "2026-09-10T09:35:15.536Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 0] This is not a painting at all—it is a handwritten diary or journal entry dated Wednesday, April 12, 1871, describing a journey by steamship from New York. The image contains only cursive text on aged paper with no visual artwork, figures, symbols, or pictorial content to analyz"
+  },
+  {
+    "objectID": 436896,
+    "title": "Portrait of a Woman with a Man at a Casement",
+    "artistDisplayName": "Fra Filippo Lippi",
+    "usedAt": "2026-09-10T09:43:21.779Z",
+    "videoId": "p2CEePsJgdY"
   }
 ]

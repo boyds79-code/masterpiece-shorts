@@ -29,3 +29,5 @@
 | 2026-09-10 | Juan de Pareja (ca. 1608–1670) | Velázquez (Diego Rodríguez de Silva y Velázquez) | [rrBZ5tGOpE0](https://studio.youtube.com/video/rrBZ5tGOpE0/edit) |
 | 2026-09-10 | Diana and Actaeon | Bartholomeus Spranger | [udu2JCW0uEg](https://studio.youtube.com/video/udu2JCW0uEg/edit) |
 | 2026-09-10 | Bashi-Bazouk | Jean-Léon Gérôme | [yiYeguCDZ9U](https://studio.youtube.com/video/yiYeguCDZ9U/edit) |
+| 2026-09-10 | Illustrated manuscript of the Lotus Sutra, Volume 2 | Unidentified artist | [lmPqsD3pqUI](https://studio.youtube.com/video/lmPqsD3pqUI/edit) |
+| 2026-09-10 | Portrait of a Woman with a Man at a Casement | Fra Filippo Lippi | [p2CEePsJgdY](https://studio.youtube.com/video/p2CEePsJgdY/edit) |
