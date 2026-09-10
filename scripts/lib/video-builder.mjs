@@ -120,16 +120,22 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   return outPath;
 }
 
-// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 빠른 디졸브(크로스페이드)로 이어붙여서
-// "타임랩스처럼 조금씩 완성되어가는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을
-// Ken Burns 줌으로 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼 durationSec을
-// 나눠서 각각 짧게 보여주고 XFADE_DUR초짜리 디졸브로 넘어갑니다. 이미지가 1장뿐이면
-// (예외적인 경우 대비) 크로스페이드 없이 buildSegmentClip과 동일하게 전체 화면을
-// 그대로 durationSec만큼 보여줍니다.
+// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 이어붙여서 "실제로 붓으로 칠해지고 있는 것처럼
+// 빠르게 색이 채워지는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을 Ken Burns 줌으로
+// 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼 durationSec을 나눠서 각각 짧게
+// 보여주고 XFADE_DUR초짜리 전환으로 넘어갑니다. 이미지가 1장뿐이면(예외적인 경우 대비)
+// 전환 없이 buildSegmentClip과 동일하게 전체 화면을 그대로 durationSec만큼 보여줍니다.
 //
-// N장, 클립 하나당 길이 L, 디졸브 X초일 때 최종 길이는 N*L - (N-1)*X입니다 — durationSec을
+// 전환 종류는 일반적인 "fade"(알파 크로스디졸브)를 쓰지 않습니다 — fade는 두 이미지가
+// 반투명하게 겹쳐 보이는 "이중 노출"처럼 보여서 실제로 붓으로 칠하는 느낌이 나지 않습니다.
+// 대신 "dissolve"(픽셀 단위로 무작위 순서에 따라 하나씩 새 이미지로 교체되는 전환)를 써서,
+// 물감이 캔버스 위에 흩뿌려지듯 번져가는 느낌에 더 가깝게 만듭니다. 전환 시간도 짧게 줘서
+// ("빠르게 칠해지는" 느낌) 전환 자체가 오래 끌리지 않게 합니다.
+//
+// N장, 클립 하나당 길이 L, 전환 X초일 때 최종 길이는 N*L - (N-1)*X입니다 — durationSec을
 // 정확히 맞추려면 L = (durationSec + (N-1)*X) / N. (직접 합성 테스트로 오차 0초 확인됨.)
-const TIMELAPSE_XFADE_SEC = 0.4;
+const TIMELAPSE_XFADE_SEC = 0.25;
+const TIMELAPSE_TRANSITION = 'dissolve';
 
 export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
   const n = imagePaths.length;
@@ -165,7 +171,7 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
     const outLabel = i === n - 1 ? 'vout' : `vx${i}`;
     const offset = i * (perClipLen - xfadeDur);
     filterParts.push(
-      `[${lastLabel}][v${i}]xfade=transition=fade:duration=${xfadeDur.toFixed(3)}:offset=${offset.toFixed(3)}[${outLabel}]`
+      `[${lastLabel}][v${i}]xfade=transition=${TIMELAPSE_TRANSITION}:duration=${xfadeDur.toFixed(3)}:offset=${offset.toFixed(3)}[${outLabel}]`
     );
     lastLabel = outLabel;
   }
