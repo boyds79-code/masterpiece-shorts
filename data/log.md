@@ -26,3 +26,4 @@
 | 2026-09-09 | Compositional Sketches for the Virgin Adoring the Christ Child, with and without the Infant St. John the Baptist; Diagram of a Perspectival Projection (recto); Slight Doodles (verso) | Leonardo da Vinci | [ElX1uB7RQsw](https://studio.youtube.com/video/ElX1uB7RQsw/edit) |
 | 2026-09-10 | Amitabha and Kshitigarba | Unidentified artist | [m_87EqZJ7Ys](https://studio.youtube.com/video/m_87EqZJ7Ys/edit) |
 | 2026-09-10 | Portrait of Nicolás Matías Fernández Méndez | José Campeche | [GtU2EWCiEd8](https://studio.youtube.com/video/GtU2EWCiEd8/edit) |
+| 2026-09-10 | Juan de Pareja (ca. 1608–1670) | Velázquez (Diego Rodríguez de Silva y Velázquez) | [rrBZ5tGOpE0](https://studio.youtube.com/video/rrBZ5tGOpE0/edit) |
