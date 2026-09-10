@@ -174,5 +174,20 @@
     "artistDisplayName": "Unidentified artist",
     "usedAt": "2026-09-10T09:25:04.789Z",
     "videoId": "lmPqsD3pqUI"
+  },
+  {
+    "objectID": 591858,
+    "title": "Diaries of Samuel P. Avery",
+    "artistDisplayName": "Samuel Putnam Avery Sr.",
+    "skippedAt": "2026-09-10T09:35:15.536Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 0] This is not a painting at all—it is a handwritten diary or journal entry dated Wednesday, April 12, 1871, describing a journey by steamship from New York. The image contains only cursive text on aged paper with no visual artwork, figures, symbols, or pictorial content to analyz"
+  },
+  {
+    "objectID": 436896,
+    "title": "Portrait of a Woman with a Man at a Casement",
+    "artistDisplayName": "Fra Filippo Lippi",
+    "usedAt": "2026-09-10T09:43:21.779Z",
+    "videoId": "p2CEePsJgdY"
   }
 ]
