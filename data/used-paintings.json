@@ -159,5 +159,20 @@
     "artistDisplayName": "Jean-Léon Gérôme",
     "usedAt": "2026-09-10T04:03:43.123Z",
     "videoId": "yiYeguCDZ9U"
+  },
+  {
+    "objectID": 310073,
+    "title": "Grere'o (shield)",
+    "artistDisplayName": "Solomon Islands artist",
+    "skippedAt": "2026-09-10T09:18:00.119Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 3] This is not a painting but an Indigenous Australian funeral/memorial pole (likely a hollow log coffin or lorrkkon). While it has 3 stylized figures (one large central figure and two smaller faces at the bottom), the geometric patterns are primarily decorative/cultural design el"
+  },
+  {
+    "objectID": 36451,
+    "title": "Illustrated manuscript of the Lotus Sutra, Volume 2",
+    "artistDisplayName": "Unidentified artist",
+    "usedAt": "2026-09-10T09:25:04.789Z",
+    "videoId": "lmPqsD3pqUI"
   }
 ]
