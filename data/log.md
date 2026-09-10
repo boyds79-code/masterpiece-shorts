@@ -23,3 +23,9 @@
 | 2026-09-09 | Oedipus and the Sphinx | Gustave Moreau | [lzwvBuDznT4](https://studio.youtube.com/video/lzwvBuDznT4/edit) |
 | 2026-09-09 | "The Eavesdropper", Folio 47r from a Haft Paikar (Seven Portraits) of the Khamsa (Quintet) of Nizami of Ganja | Maulana Azhar | [4EHvhbWDFTI](https://studio.youtube.com/video/4EHvhbWDFTI/edit) |
 | 2026-09-09 | The Dance Class | Edgar Degas | [5S_h1LQvbfw](https://studio.youtube.com/video/5S_h1LQvbfw/edit) |
+| 2026-09-09 | Compositional Sketches for the Virgin Adoring the Christ Child, with and without the Infant St. John the Baptist; Diagram of a Perspectival Projection (recto); Slight Doodles (verso) | Leonardo da Vinci | [ElX1uB7RQsw](https://studio.youtube.com/video/ElX1uB7RQsw/edit) |
+| 2026-09-10 | Amitabha and Kshitigarba | Unidentified artist | [m_87EqZJ7Ys](https://studio.youtube.com/video/m_87EqZJ7Ys/edit) |
+| 2026-09-10 | Portrait of Nicolás Matías Fernández Méndez | José Campeche | [GtU2EWCiEd8](https://studio.youtube.com/video/GtU2EWCiEd8/edit) |
+| 2026-09-10 | Juan de Pareja (ca. 1608–1670) | Velázquez (Diego Rodríguez de Silva y Velázquez) | [rrBZ5tGOpE0](https://studio.youtube.com/video/rrBZ5tGOpE0/edit) |
+| 2026-09-10 | Diana and Actaeon | Bartholomeus Spranger | [udu2JCW0uEg](https://studio.youtube.com/video/udu2JCW0uEg/edit) |
+| 2026-09-10 | Bashi-Bazouk | Jean-Léon Gérôme | [yiYeguCDZ9U](https://studio.youtube.com/video/yiYeguCDZ9U/edit) |
