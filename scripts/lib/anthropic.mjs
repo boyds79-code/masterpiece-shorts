@@ -23,6 +23,99 @@ function clampBbox(b) {
   return { x, y, w, h };
 }
 
+// 그림 후보 하나가 애초에 이 포맷(숨은 디테일 여러 개를 파고드는 영상)에 쓸 만한
+// 소재인지를 대본 생성 전에 미리 판단합니다. 인스타그램 "@paintingsanalyzed" 벤치마크처럼
+// 다인물/서사/상징이 풍부한 그림을 선호하고, 배경이 단순한 1인 초상화 흉상처럼 파고들
+// 디테일이 거의 없는 그림은 걸러냅니다 (단, 상징적 소품이 많거나 잘 알려진 숨은 의미가
+// 있는 1인 초상화는 인원 수와 무관하게 통과시킵니다). 실제 대본 생성(세그먼트별 bbox까지
+// 포함하는 무거운 호출)을 하기 전에 가벼운 호출 하나로 먼저 걸러내서, 단조로운 그림에
+// 전체 파이프라인 비용을 쓰지 않게 하기 위함입니다.
+const SUITABILITY_SYSTEM_PROMPT = `You are screening candidate paintings for a YouTube Shorts channel that decodes HIDDEN MEANINGS inside famous paintings — several genuinely distinct, discoverable symbols/secrets/narrative details per painting, similar in spirit to the Instagram art-explainer account @paintingsanalyzed. That account rarely covers plain single-sitter portrait busts with nothing but a face and a blank background; it thrives on paintings packed with things to notice: multiple figures interacting, a narrative or mythological/religious/historical scene, group compositions, or a figure surrounded by richly meaningful, documented symbolic objects.
+
+Look at the actual image (not just the title/metadata) and judge whether this specific painting has enough real, visually-verifiable material to sustain 5 or more genuinely distinct "hidden detail" reveals — not padding, not five ways of restating the same single observation.
+
+STRONG candidates (suitable = true): multiple interacting figures; a narrative/mythological/religious/genre scene; a group portrait; a scene or interior dense with symbolic objects; a single figure whose clothing/objects/setting carry multiple well-documented symbolic meanings.
+
+WEAK candidates (suitable = false): a plain single-sitter portrait bust with a bare or simple background and no other notable objects, symbols, or narrative context — essentially just "a picture of a person's face/shoulders" with nothing else to discover.
+
+Count the number of distinct human/animal figures you can actually see in the image (figureCount). A painting can still be marked suitable with figureCount of 1 if it is visually rich in symbolic objects or has well-documented hidden meaning — the real test is total discoverable material, not headcount alone.
+
+You must respond by calling "evaluate_suitability" exactly once.`;
+
+/**
+ * 그림 후보 하나를 대본 생성 전에 미리 심사합니다. 네트워크/레이트리밋 등으로 이 호출
+ * 자체가 실패하면 호출자가 그 그림을 그냥 통과시킬 수 있도록 에러를 그대로 던집니다.
+ *
+ * @returns {Promise<{ suitable: boolean, figureCount?: number, reason?: string }>}
+ */
+export async function evaluatePaintingSuitability({ imageBufferForVision, imageMediaType, apiKey, model }) {
+  apiKey = apiKey?.trim();
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY가 설정되어 있지 않습니다. GitHub Actions Secret 또는 로컬 .env를 확인하세요.');
+  }
+
+  const body = {
+    model: model || DEFAULT_MODEL,
+    max_tokens: 512,
+    system: SUITABILITY_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: imageMediaType,
+              data: imageBufferForVision.toString('base64'),
+            },
+          },
+          { type: 'text', text: 'Evaluate this painting for the channel.' },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: 'evaluate_suitability',
+        description: 'Report whether this painting has enough discoverable material (figures/narrative/symbols) for the format.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            suitable: { type: 'boolean' },
+            figureCount: { type: 'integer' },
+            reason: { type: 'string' },
+          },
+          required: ['suitable', 'figureCount', 'reason'],
+        },
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'evaluate_suitability' },
+  };
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Claude 적합성 판단 API 호출 실패 (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'evaluate_suitability');
+  if (!toolUse) {
+    throw new Error('적합성 판단 응답에서 evaluate_suitability tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
+  }
+
+  return toolUse.input;
+}
+
 /**
  * Claude(vision)에게 실제 그림 이미지 + 메타데이터를 보여주고, 숏폼 영상 대본을 받아옵니다.
  *

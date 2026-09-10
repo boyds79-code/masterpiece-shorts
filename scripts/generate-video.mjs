@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { pickUnusedPainting, downloadImage } from './lib/met-api.mjs';
-import { generateVideoScript } from './lib/anthropic.mjs';
+import { generateVideoScript, evaluatePaintingSuitability } from './lib/anthropic.mjs';
 import { generateNarrationAudio } from './lib/gemini-tts.mjs';
 import { assembleVideo } from './lib/video-builder.mjs';
 import { uploadVideo, uploadCaptions, uploadThumbnail } from './lib/youtube-upload.mjs';
@@ -43,10 +43,12 @@ async function makeVisionCopy(originalPath, outPath) {
   ]);
 }
 
-// Claude vision이 특정 그림(예: 누드가 포함된 종교화/신화화 등 고전 명화에 흔한 소재)에 대해
-// 조심스러워져서 segments를 비운 채로 반환하는 경우가 있습니다 — 전체 실행을 실패시키는 대신,
-// 그 그림은 "skipped"로 기록해서 다음에 다시 뽑히지 않게 하고 다른 그림으로 넘어갑니다.
-const MAX_PAINTING_ATTEMPTS = 4;
+// 후보 그림 하나가 (a) Claude vision이 민감한 소재(누드가 포함된 종교화/신화화 등)로 보고
+// segments를 비운 채 반환하거나, (b) 사전 적합성 심사에서 "다인물/서사/상징이 부족해 파고들
+// 디테일이 거의 없다"고 판정되는 경우가 있습니다 — 두 경우 모두 전체 실행을 실패시키는 대신
+// 그 그림만 "skipped"로 기록해서 다음에 다시 뽑히지 않게 하고 다른 그림으로 넘어갑니다.
+// 적합성 심사로 거절되는 그림이 늘어난 만큼 시도 횟수를 4 -> 6으로 늘립니다.
+const MAX_PAINTING_ATTEMPTS = 6;
 
 /**
  * 영상 하나(그림 선정 -> 대본 -> 나레이션 -> 영상 조립 -> YouTube 업로드)를 처음부터 끝까지
@@ -84,6 +86,41 @@ export async function generateOneVideo() {
     const imageBuffer = await downloadImage(candidate.primaryImage);
     fs.writeFileSync(imagePath, imageBuffer);
     await makeVisionCopy(imagePath, visionPath);
+
+    console.log('[generate-video] Claude에게 이 그림이 포맷에 맞는 소재인지(다인물/서사/상징 밀도) 먼저 확인하는 중...');
+    let suitability;
+    try {
+      suitability = await evaluatePaintingSuitability({
+        imageBufferForVision: fs.readFileSync(visionPath),
+        imageMediaType: 'image/jpeg',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.CLAUDE_MODEL,
+      });
+    } catch (err) {
+      // 적합성 판단 자체가 실패해도(네트워크/레이트리밋 등) 이 그림을 억울하게 버리지 않고
+      // 그냥 통과시켜서 계속 진행합니다 — 다음 단계인 대본 생성에서 어차피 한 번 더
+      // 품질(소재 민감도) 검증이 이뤄집니다.
+      console.warn(`[generate-video] 적합성 판단 실패, 건너뛰지 않고 계속 진행합니다: ${err.message}`);
+      suitability = { suitable: true };
+    }
+
+    if (!suitability.suitable) {
+      console.warn(
+        `[generate-video] "${candidate.title}" 은(는) 소재가 단조로워(인물 수: ${suitability.figureCount ?? '?'}) 건너뜁니다: ${suitability.reason || ''}`
+      );
+      usedList.push({
+        objectID: candidate.objectID,
+        title: candidate.title,
+        artistDisplayName: candidate.artistDisplayName,
+        skippedAt: new Date().toISOString(),
+        skipped: true,
+        reason: `[낮은 서사/상징 밀도, 인물 수 ${suitability.figureCount ?? '?'}] ${suitability.reason || ''}`.slice(0, 300),
+      });
+      saveUsed(usedList); // 같은 그림을 다음 실행에서 또 뽑지 않도록 바로 저장
+      fs.rmSync(imagePath, { force: true });
+      fs.rmSync(visionPath, { force: true });
+      continue;
+    }
 
     console.log('[generate-video] Claude에게 그림을 보여주고 대본을 받는 중...');
     try {
@@ -126,7 +163,7 @@ export async function generateOneVideo() {
 
   if (!painting) {
     throw Object.assign(
-      new Error(`${MAX_PAINTING_ATTEMPTS}개 그림을 시도했지만 모두 민감한 소재로 추정되어 대본 생성에 실패했습니다.`),
+      new Error(`${MAX_PAINTING_ATTEMPTS}개 그림을 시도했지만 모두 민감한 소재이거나 소재가 단조로워(다인물/서사/상징 부족) 사용하지 못했습니다.`),
       { code: 'CONTENT_REFUSAL' }
     );
   }
