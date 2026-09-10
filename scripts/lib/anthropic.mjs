@@ -4,18 +4,18 @@ import path from 'node:path';
 
 import { getImageDimensions, cropStill } from './video-builder.mjs';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
+export const API_URL = 'https://api.anthropic.com/v1/messages';
 
 // TODO: 최신 모델 ID를 확인하고 필요하면 교체하세요.
 // https://docs.claude.com/en/docs/about-claude/models
-const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
 const MIN_SIZE = 0.12;
 
 // Claude가 지시를 완벽히 안 지켰을 경우를 대비한 안전장치 — bbox를 이미지 범위 안으로
 // clamp하고, 너무 작은 crop을 최소 크기로 보정합니다. (ffmpeg 단계에서 이상한 값으로
 // 죽는 것보다 여기서 미리 방어하는 게 낫습니다.)
-function clampBbox(b) {
+export function clampBbox(b) {
   const w = Math.max(MIN_SIZE, Math.min(1, b.w));
   const h = Math.max(MIN_SIZE, Math.min(1, b.h));
   const x = Math.max(0, Math.min(1 - w, b.x));
@@ -284,14 +284,14 @@ You must respond by calling the "submit_script" tool exactly once.`;
   return script;
 }
 
-function isNearFullImageBbox(b) {
+export function isNearFullImageBbox(b) {
   return b.w >= 0.9 && b.h >= 0.9;
 }
 
 // 3x3 그리드 라벨("top-left", "middle-center to middle-right" 등)을 x/y 비율 범위로
 // 해석합니다. 라벨에서 행/열 키워드를 하나도 못 찾으면(자유 형식 텍스트 등) null을
 // 반환해서 이 검사를 건너뛰게 합니다.
-function parseGridPosition(text) {
+export function parseGridPosition(text) {
   const t = (text || '').toLowerCase();
   const cols = [];
   if (/\bleft\b/.test(t)) cols.push([0, 1 / 3]);
@@ -315,7 +315,7 @@ function parseGridPosition(text) {
 // 말하는 그리드 칸 밖에 있으면 같은 크기(w,h)를 유지한 채 중심을 그 칸 가운데로
 // 옮깁니다. "완전히 엉뚱한 곳"을 확대하는 가장 심한 사례를 API 검증 이전에 이미
 // 걸러내기 위한 무료 안전장치입니다.
-function reconcileBboxWithGridPosition(seg) {
+export function reconcileBboxWithGridPosition(seg) {
   const b = seg.bbox;
   if (isNearFullImageBbox(b)) return; // IDENTIFY/CONTEXT/CLOSE는 검사 대상 아님
 

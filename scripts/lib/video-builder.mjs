@@ -326,3 +326,76 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
 
   return { finalPath, srtPath, thumbnailPath };
 }
+
+
+/**
+ * "제작 과정 상상 재현" 영상 전용 조립 함수. 기존 assembleVideo()와 달리 세그먼트마다
+ * 서로 다른 이미지(실제 사진 또는 AI가 생성한 스케치/밑칠/마무리 직전 단계 이미지)를 쓸 수
+ * 있습니다. segments 각 항목은 { narration, audioPath, durationSec, imagePath, bbox }를
+ * 가지고 있어야 합니다 — bbox가 없으면 전체 화면(x:0,y:0,w:1,h:1)으로 간주합니다.
+ *
+ * 인트로 카드에는 "AI-Imagined Creation Process"라는 문구를 항상 고정으로 넣어서, 이 영상이
+ * 실제 제작 기록이 아니라 AI가 상상으로 재구성한 것임을 시청자가 나레이션을 듣기도 전에
+ * 화면에서부터 알 수 있게 합니다 (대본 나레이션에만 의존하지 않는 코드 레벨 안전장치).
+ *
+ * @returns {{ finalPath: string, srtPath: string, thumbnailPath: string }}
+ */
+export async function assembleProcessVideo({ finishedImagePath, segments, painting, workDir }) {
+  fs.mkdirSync(workDir, { recursive: true });
+
+  const clipPaths = [];
+
+  const introPath = path.join(workDir, 'intro.mp4');
+  await buildTitleCard({
+    imagePath: finishedImagePath,
+    lines: [
+      painting.title,
+      `${painting.artistDisplayName}${painting.objectDate ? ' · ' + painting.objectDate : ''}`,
+      'AI-Imagined Creation Process',
+    ],
+    durationSec: INTRO_DURATION_SEC,
+    outPath: introPath,
+  });
+  clipPaths.push(introPath);
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const bbox = seg.bbox || { x: 0, y: 0, w: 1, h: 1 };
+    const { width: imgWidth, height: imgHeight } = await getImageDimensions(seg.imagePath);
+
+    const rawVideo = path.join(workDir, `seg-${i}-video.mp4`);
+    const finalSeg = path.join(workDir, `seg-${i}-final.mp4`);
+
+    await buildSegmentClip({
+      imagePath: seg.imagePath,
+      imgWidth,
+      imgHeight,
+      bbox,
+      durationSec: seg.durationSec,
+      outPath: rawVideo,
+    });
+    await muxSegmentAudio({ videoPath: rawVideo, audioPath: seg.audioPath, outPath: finalSeg });
+    fs.rmSync(rawVideo, { force: true });
+    clipPaths.push(finalSeg);
+  }
+
+  const outroPath = path.join(workDir, 'outro.mp4');
+  await buildTitleCard({
+    imagePath: finishedImagePath,
+    lines: ['A speculative recreation,', 'imagined from the finished piece.'],
+    durationSec: 3,
+    outPath: outroPath,
+  });
+  clipPaths.push(outroPath);
+
+  const finalPath = path.join(workDir, 'final.mp4');
+  await concatClips(clipPaths, finalPath);
+
+  const srtPath = path.join(workDir, 'captions.srt');
+  fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
+
+  const thumbnailPath = path.join(workDir, 'thumbnail.jpg');
+  await buildThumbnail({ imagePath: finishedImagePath, outPath: thumbnailPath });
+
+  return { finalPath, srtPath, thumbnailPath };
+}

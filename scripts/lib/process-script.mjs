@@ -1,0 +1,208 @@
+import { API_URL, DEFAULT_MODEL, clampBbox, isNearFullImageBbox, reconcileBboxWithGridPosition } from './anthropic.mjs';
+
+/**
+ * Claude(vision)에게 완성된 명화 이미지 + 메타데이터를 보여주고, "이 그림이 어떻게 그려졌을지"를
+ * 상상으로 재구성하는 영상 대본을 받아옵니다. 실제 제작 과정 기록이 아니라, 완성작에서
+ * 보이는 화풍/기법/구도를 근거로 "이런 순서로 이렇게 그려졌을 것 같다"고 추정하는 것이므로,
+ * 시스템 프롬프트에서 단정적 서술("~였다")이 아니라 추정 어조("~였을 것이다", "~했을 가능성이
+ * 높다")를 강제합니다. 영상 자체에 "AI 상상 재현"이라는 문구를 코드 레벨(제목/설명/인트로
+ * 카드)에서 강제로 붙이는 건 이 함수를 호출하는 쪽(generate-process-video.mjs)의 책임입니다 —
+ * Claude의 서술에만 의존하면 매번 빠짐없이 지켜진다는 보장이 없기 때문입니다.
+ *
+ * 세그먼트는 정해진 순서를 따릅니다:
+ * 1. identify (실제 사진, 전체 화면): 완성작이 무엇인지 소개.
+ * 2. reference (실제 사진, 전체 또는 특정 부분 확대): 작가가 이 장면/구도를 그리기 위해 무엇을
+ *    관찰/참고했을지 상상.
+ * 3~4. sketch, underpainting (각각 AI가 새로 생성한 이미지): 초기 스케치 단계, 밑칠/명암
+ *    구축 단계를 상상해서 묘사. 이 두 세그먼트는 imagePrompt를 함께 받아 Gemini 이미지
+ *    생성에 그대로 사용합니다.
+ * 5. refine (AI가 새로 생성한, 완성 직전 단계 이미지, 선택적): 세부 묘사/글레이징 단계.
+ * 6. finish (실제 사진, 전체 화면): 완성작으로 돌아와 변화를 되짚으며 마무리.
+ */
+export async function generateProcessScript({ painting, imageBufferForVision, imageMediaType, apiKey, model }) {
+  apiKey = apiKey?.trim();
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY가 설정되어 있지 않습니다. GitHub Actions Secret 또는 로컬 .env를 확인하세요.');
+  }
+
+  const metadataBlock = [
+    `Title: ${painting.title}`,
+    `Artist: ${painting.artistDisplayName || 'Unknown'}`,
+    painting.artistDisplayBio ? `Artist bio: ${painting.artistDisplayBio}` : null,
+    `Date: ${painting.objectDate || 'Unknown'}`,
+    `Medium: ${painting.medium || 'Unknown'}`,
+    painting.culture ? `Culture: ${painting.culture}` : null,
+    painting.department ? `Department: ${painting.department}` : null,
+    painting.creditLine ? `Credit line: ${painting.creditLine}` : null,
+    `Source: The Metropolitan Museum of Art, object #${painting.objectID}, ${painting.objectURL}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const systemPrompt = `You are a scriptwriter for a YouTube Shorts channel that imagines HOW a famous painting might have been made — a speculative, step-by-step recreation of the artist's process, going from a blank canvas to the finished masterpiece. This is NOT a documented historical record (almost none exist for these works) — it is an educated, artistically-informed reconstruction based on (a) what is actually visible in the finished painting, (b) well-known general techniques of the artist's era/medium (e.g., oil underpainting in grisaille or earth tones, egg tempera cartoons transferred to panel, alla prima direct painting, glazing layers), and (c) the artist's documented working habits when something specific is actually known.
+
+CRITICAL — honesty about speculation: Never assert invented specific facts as if documented (no fake quotes, no invented anecdotes, no claiming a specific X-ray/infrared study exists unless it's genuinely well-known and you're confident it does). Use hedging language throughout — "likely", "probably", "it's easy to imagine", "may well have" — never flat assertions about what definitely happened. If a specific technical detail about this artist/era IS well-established (e.g., "Vermeer is believed to have used a camera obscura", "Renaissance panel painters typically built up thin glazes over an underdrawing"), you may state that established general fact plainly, then apply it speculatively to this specific painting.
+
+You will be shown the actual finished painting plus its museum metadata. Look closely at real, visible qualities — visible brushwork texture, layering, edges (hard vs. soft), evidence of underdrawing showing through thin paint, palette choices, compositional structure — and build the imagined process around what these visible clues suggest, not generic filler that could apply to any painting.
+
+Structure the script as exactly 6 segments, in exactly this order and stage type:
+1. stage "identify" (usesGeneratedImage: false, bbox = the whole painting): Introduce the finished painting — title, artist, rough year. End with a hook promising to reconstruct how it might have come together, stroke by stroke.
+2. stage "reference" (usesGeneratedImage: false, bbox = whole painting or a specific real detail): Imagine what the artist likely observed, studied, or referenced to build this composition (a live model, a study of natural light, a religious/mythological source text, preliminary drawings, a specific setting) — grounded in what the finished image actually shows.
+3. stage "sketch" (usesGeneratedImage: true): Describe the imagined initial composition sketch — how the major shapes, figures, and structure were likely blocked in first, loosely, before any color. Also write "imagePrompt": a detailed prompt for an AI image model to redraw this exact composition as a loose, unfinished pencil/charcoal underdrawing sketch (same framing, same major shapes, no color, visible construction lines) — the prompt must explicitly ask the model to preserve the same composition/subject positions as the reference image it will be shown.
+4. stage "underpainting" (usesGeneratedImage: true): Describe the imagined tonal/color block-in stage — establishing light and shadow masses or a monochrome/limited-palette underpainting before detail work. Write an "imagePrompt" asking for the same composition rendered as a rough, flat-toned underpainting (blocked-in color masses, no fine detail, visible unfinished edges), preserving the same composition as the reference image.
+5. stage "refine" (usesGeneratedImage: true): Describe the imagined final push — layering glazes, sharpening edges, adding the fine details that make the painting feel alive. Write an "imagePrompt" asking for a near-final version of the same composition: mostly finished but with a few areas still visibly rough or unglazed, preserving the same composition as the reference image.
+6. stage "finish" (usesGeneratedImage: false, bbox = the whole painting): Pull back to the real finished painting. Reflect on the transformation from rough sketch to finished work, then close with a light line reinforcing that this was an imagined reconstruction, not a documented record (e.g., "That's our best guess at how it came together — nobody alive watched them paint it.").
+
+For every segment:
+- "narration": ONE to THREE short sentences, natural spoken chunks, no references to "earlier" segments.
+- "focus": short 3-6 word label describing what's shown.
+- For "identify"/"reference"/"finish" segments (usesGeneratedImage: false): also provide "gridPosition" (3x3 grid label, e.g. "top-left") and "bbox" (x,y,w,h as fractions 0-1, x+w<=1, y+h<=1, w>=0.12, h>=0.12). "identify" and "finish" must use approximately the full image (x:0,y:0,w:1,h:1 or very close). "reference" may use a specific real detail's region if that better supports the narration, or the full image if the observation is about the whole scene.
+- For "sketch"/"underpainting"/"refine" segments (usesGeneratedImage: true): provide "imagePrompt" as described above, and omit bbox/gridPosition (or set bbox to the full image as a placeholder — it will be ignored).
+
+Narration total length across all 6 segments: roughly 140-200 words total.
+Tone: curious and speculative but confident in craft knowledge — like a painter-friend walking you through how they'd guess this was built, not a dry textbook.
+
+- Write a scroll-stopping YouTube Shorts title (under 80 characters — a fixed disclosure suffix will be appended by our system, so leave room) that promises to reveal how the painting might have been made, naming the painting and/or artist.
+- Write a YouTube description: 2-4 sentences about the painting and what the imagined process reconstruction shows, written in a way that is honest this is a speculative recreation.
+- Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art technique terms (e.g. "underpainting", "art process", "painting technique"), and general discovery terms (e.g. "art history", "how paintings are made", "famous paintings").
+
+You must respond by calling the "submit_process_script" tool exactly once.`;
+
+  const body = {
+    model: model || DEFAULT_MODEL,
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: imageMediaType,
+              data: imageBufferForVision.toString('base64'),
+            },
+          },
+          {
+            type: 'text',
+            text: `Here is the painting's museum metadata:\n\n${metadataBlock}\n\nWrite the speculative "how it was made" Shorts script now.`,
+          },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: 'submit_process_script',
+        description: 'Submit the finished speculative process-recreation video script.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            youtube: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                tags: { type: 'array', items: { type: 'string' }, minItems: 8, maxItems: 15 },
+              },
+              required: ['title', 'description', 'tags'],
+            },
+            segments: {
+              type: 'array',
+              minItems: 6,
+              maxItems: 6,
+              items: {
+                type: 'object',
+                properties: {
+                  stage: { type: 'string', enum: ['identify', 'reference', 'sketch', 'underpainting', 'refine', 'finish'] },
+                  narration: { type: 'string' },
+                  focus: { type: 'string' },
+                  usesGeneratedImage: { type: 'boolean' },
+                  imagePrompt: { type: 'string' },
+                  gridPosition: { type: 'string' },
+                  bbox: {
+                    type: 'object',
+                    properties: {
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                      w: { type: 'number' },
+                      h: { type: 'number' },
+                    },
+                    required: ['x', 'y', 'w', 'h'],
+                  },
+                },
+                required: ['stage', 'narration', 'focus', 'usesGeneratedImage'],
+              },
+            },
+          },
+          required: ['youtube', 'segments'],
+        },
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'submit_process_script' },
+  };
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Claude API 호출 실패 (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_process_script');
+  if (!toolUse) {
+    throw new Error('Claude 응답에서 submit_process_script tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
+  }
+
+  const script = toolUse.input;
+  validateAndClampProcessScript(script);
+  return script;
+}
+
+const EXPECTED_STAGE_ORDER = ['identify', 'reference', 'sketch', 'underpainting', 'refine', 'finish'];
+
+// Claude가 지시를 완벽히 안 지켰을 경우를 대비한 안전장치: segments가 비었거나, 6개가
+// 아니거나, stage 순서가 기대와 다르거나, 생성 이미지 세그먼트에 imagePrompt가 없거나,
+// 실사진 세그먼트에 bbox가 없으면 잡아냅니다. segments가 아예 비어 있는 경우는(예: 민감한
+// 소재로 Claude가 응답을 거부한 경우) 기존 hidden-detail 파이프라인과 동일하게
+// CONTENT_REFUSAL로 표시해서, 이 그림만 건너뛰고 다른 그림으로 재시도할 수 있게 합니다.
+// 그 외의(스키마 위반성) 문제는 이 그림 자체의 문제가 아니라 모델이 형식을 잘못 지킨
+// 시스템적인 문제이므로 일반 에러로 던져서 바로 실행을 중단시킵니다.
+function validateAndClampProcessScript(script) {
+  if (!Array.isArray(script.segments) || script.segments.length === 0) {
+    throw Object.assign(new Error('Claude가 segments를 비워서 반환했습니다.'), { code: 'CONTENT_REFUSAL' });
+  }
+  if (script.segments.length !== 6) {
+    throw new Error(`segments가 정확히 6개여야 하는데 ${script.segments.length}개가 반환되었습니다.`);
+  }
+  script.segments.forEach((seg, i) => {
+    const expectedStage = EXPECTED_STAGE_ORDER[i];
+    if (seg.stage !== expectedStage) {
+      throw new Error(`segments[${i}].stage가 "${expectedStage}"이어야 하는데 "${seg.stage}"입니다.`);
+    }
+    if (seg.usesGeneratedImage) {
+      if (!seg.imagePrompt || !seg.imagePrompt.trim()) {
+        throw new Error(`segments[${i}] (stage: ${seg.stage})는 usesGeneratedImage=true인데 imagePrompt가 비어 있습니다.`);
+      }
+    } else {
+      if (!seg.bbox) {
+        throw new Error(`segments[${i}] (stage: ${seg.stage})는 usesGeneratedImage=false인데 bbox가 없습니다.`);
+      }
+      seg.bbox = clampBbox(seg.bbox);
+      reconcileBboxWithGridPosition(seg);
+      if ((seg.stage === 'identify' || seg.stage === 'finish') && !isNearFullImageBbox(seg.bbox)) {
+        // identify/finish는 전체 화면이어야 하므로, 실수로 좁게 나왔으면 강제로 전체로 되돌립니다.
+        seg.bbox = { x: 0, y: 0, w: 1, h: 1 };
+      }
+    }
+  });
+}

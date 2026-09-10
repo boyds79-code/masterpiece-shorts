@@ -30,6 +30,7 @@ export async function uploadVideo({
   description,
   tags,
   privacyStatus,
+  containsSyntheticMedia,
   clientId,
   clientSecret,
   refreshToken,
@@ -40,6 +41,18 @@ export async function uploadVideo({
   // 제목은 YouTube 제한이 100자이지만, 여유를 두고 95자에서 자릅니다.
   const safeTitle = title.length > 95 ? `${title.slice(0, 92)}...` : title;
 
+  const status = {
+    privacyStatus: privacyStatus || 'private',
+    selfDeclaredMadeForKids: false,
+  };
+  // "제작 과정 상상 재현" 영상처럼 AI가 생성한 이미지(스케치/밑칠 단계)가 들어간 영상은
+  // YouTube의 "변형되었거나 합성된 콘텐츠" 공개 항목을 켭니다 — 대본/화면 문구뿐 아니라
+  // 플랫폼 차원에서도 명시적으로 표시되도록 하기 위함입니다. 호출하는 쪽에서
+  // containsSyntheticMedia를 안 넘기면(기존 hidden-detail 파이프라인) 기본 동작은 그대로입니다.
+  if (containsSyntheticMedia) {
+    status.containsSyntheticMedia = true;
+  }
+
   const res = await youtube.videos.insert({
     part: ['snippet', 'status'],
     requestBody: {
@@ -49,10 +62,7 @@ export async function uploadVideo({
         tags,
         categoryId: '27', // Education
       },
-      status: {
-        privacyStatus: privacyStatus || 'private',
-        selfDeclaredMadeForKids: false,
-      },
+      status,
     },
     media: {
       body: fs.createReadStream(filePath),

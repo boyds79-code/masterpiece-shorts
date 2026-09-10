@@ -140,16 +140,62 @@ git push -u origin main
 
 ```
 scripts/generate-video.mjs      메인 파이프라인 (그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드)
+scripts/generate-process-video.mjs  "제작 과정 상상 재현" 파이프라인 (아래 별도 섹션 참고)
 scripts/get-youtube-token.mjs   최초 1회 로컬 실행용 OAuth refresh token 발급 스크립트
 scripts/lib/met-api.mjs         메트로폴리탄 미술관 Open Access API
-scripts/lib/anthropic.mjs       Claude(vision)로 대본 생성
+scripts/lib/anthropic.mjs       Claude(vision)로 "숨은 의미" 대본 생성 + 그림 적합성 사전 심사
+scripts/lib/process-script.mjs  Claude(vision)로 "제작 과정 상상" 대본 생성
 scripts/lib/gemini-tts.mjs      Gemini TTS로 나레이션 음성 생성
+scripts/lib/gemini-image.mjs    Gemini 이미지 생성으로 스케치/밑칠 단계 이미지 생성
 scripts/lib/video-builder.mjs   ffmpeg 기반 영상 조립 (줌/팬, SRT 자막 생성, 인트로/아웃트로)
 scripts/lib/youtube-upload.mjs  YouTube Data API v3 업로드 (영상 + 자막(CC) 트랙)
-data/used-paintings.json        이미 쓴 그림 목록 (중복 방지, 자동 갱신)
-data/log.md                     생성된 영상 기록 (자동 갱신)
-.github/workflows/daily-video.yml  수동(workflow_dispatch)으로만 실행되는 워크플로
+data/used-paintings.json        "숨은 의미" 영상에 이미 쓴 그림 목록 (중복 방지, 자동 갱신)
+data/log.md                     "숨은 의미" 영상 생성 기록 (자동 갱신)
+data/used-paintings-process.json  "제작 과정 상상 재현" 영상에 이미 쓴 그림 목록 (별도 관리)
+data/log-process.md             "제작 과정 상상 재현" 영상 생성 기록 (별도 관리)
+.github/workflows/daily-video.yml   수동(workflow_dispatch)으로만 실행되는 "숨은 의미" 워크플로
+.github/workflows/process-video.yml 수동(workflow_dispatch)으로만 실행되는 "제작 과정 상상 재현" 워크플로
 ```
+
+## "제작 과정 상상 재현" 영상 (별도 파이프라인)
+
+완성된 명화를 보고 "이 작가는 이런 걸 관찰하고, 이런 방식으로 스케치부터 시작해서
+이렇게 완성했을 것 같다"를 상상으로 재구성하는 영상입니다. 기존 "숨은 의미" 영상과는
+완전히 별도의 파이프라인이며, 위의 API 키(Anthropic/Gemini/YouTube)를 그대로 재사용합니다.
+
+**작동 방식**
+1. Met에서 아직 이 형식으로 안 쓴 그림을 하나 고릅니다 (`data/used-paintings-process.json`으로
+   별도 관리 — "숨은 의미" 영상 목록과는 독립적이라, 같은 그림이 두 형식에 각각 쓰일 수 있습니다).
+2. Claude가 완성작 이미지를 보고 6단계 대본을 씁니다: 소개 → (작가가 뭘 참고했을지) 관찰 →
+   스케치 단계 → 밑칠/명암 단계 → 마무리 직전 단계 → 완성작으로 복귀.
+3. "스케치"/"밑칠"/"마무리 직전" 3단계는 실제로 존재하는 이미지가 아니므로, Gemini 이미지
+   생성 모델이 완성작을 참고 이미지로 받아 그 단계처럼 보이는 이미지를 새로 그립니다.
+4. 각 단계 나레이션은 Gemini TTS로 음성 변환하고, ffmpeg으로 이어붙여 영상을 만듭니다.
+5. YouTube에 비공개로 업로드합니다.
+
+**"상상 재현"임을 어떻게 알리나요 — 대본 내용에만 의존하지 않습니다**
+- 인트로 화면 카드에 항상 "AI-Imagined Creation Process" 문구가 고정으로 들어갑니다.
+- YouTube 제목 끝에 항상 "(AI-Imagined Process)"가 자동으로 붙습니다.
+- YouTube 설명 맨 앞에 항상 고정 고지 문단이 자동으로 들어갑니다.
+- 업로드 시 YouTube의 "변형되었거나 합성된 콘텐츠(altered or synthetic content)" 공개
+  항목(`containsSyntheticMedia`)을 자동으로 켭니다.
+- (추가로) Claude에게 나레이션 자체도 단정적 서술이 아니라 "~였을 것이다" 같은 추정
+  어조로 쓰도록 지시하지만, 위 4가지는 대본 내용과 무관하게 항상 강제로 적용됩니다.
+
+**실행 방법**
+```bash
+npm run generate:process
+```
+또는 저장소 **Actions 탭 → Generate masterpiece process-recreation short → Run workflow**.
+
+**참고**
+- `GEMINI_IMAGE_MODEL`은 비교적 최근에 나온 Gemini 이미지 생성 API를 씁니다 — 처음
+  한 번은 직접 실행해서 스케치/밑칠 단계 이미지가 잘 나오는지, 응답 형식이 예상과
+  맞는지 확인해보는 걸 권장합니다. 만약 이미지 생성 쪽에서 에러가 나면 에러 메시지에
+  Gemini 응답 원본 일부가 함께 찍히니, 그걸 보고 `scripts/lib/gemini-image.mjs`의
+  `extractImageBase64()`만 살짝 고치면 됩니다.
+- 이 형식은 "숨은 의미" 영상에 있는 그림 적합성(다인물/서사 밀도) 사전 심사가 없습니다 —
+  제작 과정 상상은 인물 수와 크게 상관없이 대부분의 그림에 적용할 수 있기 때문입니다.
 
 ## 로컬에서 다시 테스트하기
 
