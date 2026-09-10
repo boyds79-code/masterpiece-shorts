@@ -291,28 +291,62 @@ export async function buildTitleCard({ imagePath, lines, durationSec, outPath })
   return outPath;
 }
 
+// 썸네일 제목 텍스트는 fontsize=72로 크게 그리므로(작은 화면에서도 읽히도록), 타이틀
+// 카드(fontsize=58, 24자)보다 한 줄에 들어가는 글자 수를 더 적게 잡습니다.
+const THUMBNAIL_TITLE_MAX_CHARS_PER_LINE = 18;
+const THUMBNAIL_BADGE_DEFAULT_TEXT = 'HOW IT WAS PAINTED';
+
 /**
  * YouTube 썸네일용 정지 이미지를 만듭니다. 인트로 카드와 달리 그림을 잘라내지(crop) 않고
  * 전체가 다 보이도록 비율에 맞춰 안쪽에 맞추고(letterbox/pillarbox), 남는 여백은 같은
  * 그림을 흐릿하게 확대한 배경으로 채웁니다 — 검은 여백 없이 그림 전체를 꽉 찬 느낌으로
  * 보여주기 위해서입니다.
+ *
+ * title이 주어지면(제작 과정 상상 재현 파이프라인에서 영상 제목을 넘겨줍니다) 화면 위쪽에
+ * 큰 글씨로 얹고, badgeText(기본값 "HOW IT WAS PAINTED")를 아래쪽에 눈에 띄는 색 배지로
+ * 얹어서, 썸네일만 보고도 이 영상이 "어떻게 그려졌는지"를 보여준다는 게 바로 드러나게
+ * 합니다. title을 안 넘기면(기존 "숨은 의미" 파이프라인) 텍스트 없이 예전과 동일하게
+ * 그림만 꽉 채운 썸네일을 만듭니다 — 그 형식은 제작 과정이 아니라 숨은 디테일을 다루므로
+ * 이 문구가 맞지 않습니다.
  */
-export async function buildThumbnail({ imagePath, outPath }) {
-  const filterComplex = [
+export async function buildThumbnail({ imagePath, title, badgeText, outPath }) {
+  const resolvedBadgeText = badgeText !== undefined ? badgeText : (title ? THUMBNAIL_BADGE_DEFAULT_TEXT : null);
+  const filterParts = [
     `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},boxblur=25:5,eq=brightness=-0.08[bg]`,
     `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease[fg]`,
-    `[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto,format=yuv420p[out]`,
-  ].join(';');
+    `[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[merged]`,
+  ];
+
+  let lastLabel = 'merged';
+  let titleCaptionFile = null;
+  if (title) {
+    titleCaptionFile = `${outPath}.title.txt`;
+    fs.writeFileSync(titleCaptionFile, wrapText(title, THUMBNAIL_TITLE_MAX_CHARS_PER_LINE));
+    filterParts.push(
+      `[${lastLabel}]drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:textfile=${escapeDrawtextPath(titleCaptionFile)}:fontsize=72:fontcolor=white:line_spacing=16:x=(w-text_w)/2:y=90:box=1:boxcolor=black@0.55:boxborderw=30[titled]`
+    );
+    lastLabel = 'titled';
+  }
+  if (resolvedBadgeText) {
+    const escapedBadge = resolvedBadgeText.split("'").join("\\'");
+    filterParts.push(
+      `[${lastLabel}]drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:text='${escapedBadge}':fontsize=46:fontcolor=black:x=(w-text_w)/2:y=h-190:box=1:boxcolor=0xF5C242@0.95:boxborderw=24[badged]`
+    );
+    lastLabel = 'badged';
+  }
+  filterParts.push(`[${lastLabel}]format=yuv420p[out]`);
 
   await run('ffmpeg', [
     '-y',
     '-i', imagePath,
-    '-filter_complex', filterComplex,
+    '-filter_complex', filterParts.join(';'),
     '-map', '[out]',
     '-frames:v', '1',
     '-q:v', '2',
     outPath,
   ]);
+
+  if (titleCaptionFile) fs.rmSync(titleCaptionFile, { force: true });
 
   return outPath;
 }
@@ -472,7 +506,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
  *
  * @returns {{ finalPath: string, srtPath: string, thumbnailPath: string }}
  */
-export async function assembleProcessVideo({ finishedImagePath, segments, painting, workDir }) {
+export async function assembleProcessVideo({ finishedImagePath, segments, painting, title, workDir }) {
   fs.mkdirSync(workDir, { recursive: true });
 
   const clipPaths = [];
@@ -534,7 +568,7 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
   fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
 
   const thumbnailPath = path.join(workDir, 'thumbnail.jpg');
-  await buildThumbnail({ imagePath: finishedImagePath, outPath: thumbnailPath });
+  await buildThumbnail({ imagePath: finishedImagePath, title, outPath: thumbnailPath });
 
   return { finalPath, srtPath, thumbnailPath };
 }
