@@ -170,6 +170,42 @@ export async function generateOneVideo() {
 
   console.log(`[generate-video] 대본 완성 — 세그먼트 ${script.segments.length}개, 제목: "${script.youtube.title}"`);
 
+  const { uploadResult } = await buildAndUploadHiddenMeaningVideo({ painting, script, imagePath, workDir });
+
+  usedList.push({
+    objectID: painting.objectID,
+    title: painting.title,
+    artistDisplayName: painting.artistDisplayName,
+    usedAt: new Date().toISOString(),
+    videoIdMeaning: uploadResult.videoId,
+  });
+  saveUsed(usedList);
+  appendLog({ painting, youtube: script.youtube, uploadResult });
+
+  if (process.env.GITHUB_ENV) {
+    fs.appendFileSync(
+      process.env.GITHUB_ENV,
+      `VIDEO_TITLE=${script.youtube.title}\nVIDEO_ID=${uploadResult.videoId}\nPAINTING_TITLE=${painting.title}\n`
+    );
+  }
+
+  return { painting, script, uploadResult };
+}
+
+/**
+ * "숨은 의미" 대본(script) + 이미 선정된 그림/이미지로부터 나레이션 오디오 생성 -> 영상 조립
+ * -> YouTube 업로드(영상/자막/썸네일)까지 처리합니다. generateOneVideo()가 내부적으로 이
+ * 함수를 쓰고, generate-duo-video.mjs(그림 하나로 "그리는 방법" + "숨은 의미" 쇼츠 두 개를
+ * 만드는 오케스트레이터)도 그림 선정을 직접 한 뒤 이 함수를 재사용합니다 — 그래서 그림
+ * 선정/대본 생성 로직은 이 함수에 없고, 호출자가 이미 만든 painting/script/imagePath를
+ * 받기만 합니다.
+ *
+ * workDir은 호출자가 만들어서 넘겨야 하고, 성공/실패와 무관하게 이 함수가 끝나면서
+ * (finally) 삭제합니다 — 호출자는 그 안의 파일을 이 함수 호출 이후에 쓰면 안 됩니다.
+ *
+ * @returns {Promise<{ uploadResult: object }>}
+ */
+export async function buildAndUploadHiddenMeaningVideo({ painting, script, imagePath, workDir }) {
   // 여기서부터 업로드 완료까지 중간 어디서든 실패하면(TTS 서버 오류, ffmpeg 실패, 업로드
   // 인증 오류 등) workDir(원본 이미지/오디오/조립 중간 파일)을 지우지 않고 남겨두면 배치로
   // 여러 개 돌릴 때 실패한 시도마다 output/ 폴더에 찌꺼기가 계속 쌓입니다. try/finally로
@@ -254,24 +290,7 @@ export async function generateOneVideo() {
     fs.rmSync(workDir, { recursive: true, force: true });
   }
 
-  usedList.push({
-    objectID: painting.objectID,
-    title: painting.title,
-    artistDisplayName: painting.artistDisplayName,
-    usedAt: new Date().toISOString(),
-    videoId: uploadResult.videoId,
-  });
-  saveUsed(usedList);
-  appendLog({ painting, youtube: script.youtube, uploadResult });
-
-  if (process.env.GITHUB_ENV) {
-    fs.appendFileSync(
-      process.env.GITHUB_ENV,
-      `VIDEO_TITLE=${script.youtube.title}\nVIDEO_ID=${uploadResult.videoId}\nPAINTING_TITLE=${painting.title}\n`
-    );
-  }
-
-  return { painting, script, uploadResult };
+  return { uploadResult };
 }
 
 // 이 파일을 직접 실행했을 때만(`npm run generate`) 한 번 돌립니다. generate-batch.mjs처럼

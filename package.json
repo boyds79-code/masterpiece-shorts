@@ -8,7 +8,8 @@
     "generate": "node scripts/generate-video.mjs",
     "generate:batch": "node scripts/generate-batch.mjs",
     "get-youtube-token": "node scripts/get-youtube-token.mjs",
-    "generate:process": "node scripts/generate-process-video.mjs"
+    "generate:process": "node scripts/generate-process-video.mjs",
+    "generate:duo": "node scripts/generate-duo-video.mjs"
   },
   "dependencies": {
     "googleapis": "^144.0.0"

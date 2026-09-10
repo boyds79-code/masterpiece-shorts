@@ -139,51 +139,53 @@ git push -u origin main
 ## 프로젝트 구조
 
 ```
-scripts/generate-video.mjs      메인 파이프라인 (그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드)
-scripts/generate-process-video.mjs  "제작 과정 상상 재현" 파이프라인 (아래 별도 섹션 참고)
+scripts/generate-video.mjs      "숨은 의미" 파이프라인 (그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드)
+scripts/generate-process-video.mjs  "제작 과정 상상 재현"("그리는 방법") 파이프라인 (아래 별도 섹션 참고)
+scripts/generate-duo-video.mjs  그림 하나로 위 두 쇼츠(그리는 방법 + 숨은 의미)를 짝지어 만드는 오케스트레이터
 scripts/get-youtube-token.mjs   최초 1회 로컬 실행용 OAuth refresh token 발급 스크립트
 scripts/lib/met-api.mjs         메트로폴리탄 미술관 Open Access API
 scripts/lib/anthropic.mjs       Claude(vision)로 "숨은 의미" 대본 생성 + 그림 적합성 사전 심사
-scripts/lib/process-script.mjs  Claude(vision)로 "제작 과정 상상" 대본 생성
+scripts/lib/process-script.mjs  Claude(vision)로 "제작 과정 상상"("그리는 방법") 대본 생성
 scripts/lib/gemini-tts.mjs      Gemini TTS로 나레이션 음성 생성
 scripts/lib/gemini-image.mjs    Gemini 이미지 생성으로 스케치/밑칠 단계 이미지 생성
 scripts/lib/video-builder.mjs   ffmpeg 기반 영상 조립 (줌/팬, SRT 자막 생성, 인트로/아웃트로)
 scripts/lib/youtube-upload.mjs  YouTube Data API v3 업로드 (영상 + 자막(CC) 트랙)
-data/used-paintings.json        "숨은 의미" 영상에 이미 쓴 그림 목록 (중복 방지, 자동 갱신)
+data/used-paintings.json        "숨은 의미"/"제작 과정" 두 형식이 함께 쓰는 그림 선정 목록(중복 방지) —
+                                 그림 하나가 어느 한쪽에서든 이미 쓰였으면 양쪽 모두에서 제외됩니다.
 data/log.md                     "숨은 의미" 영상 생성 기록 (자동 갱신)
-data/used-paintings-process.json  "제작 과정 상상 재현" 영상에 이미 쓴 그림 목록 (별도 관리)
-data/log-process.md             "제작 과정 상상 재현" 영상 생성 기록 (별도 관리)
-.github/workflows/daily-video.yml   수동(workflow_dispatch)으로만 실행되는 "숨은 의미" 워크플로
-.github/workflows/process-video.yml 수동(workflow_dispatch)으로만 실행되는 "제작 과정 상상 재현" 워크플로
+data/log-process.md             "제작 과정 상상 재현" 영상 생성 기록 (자동 갱신)
+.github/workflows/daily-video.yml   수동(workflow_dispatch)으로만 실행되는 "숨은 의미" 단독 워크플로
+.github/workflows/process-video.yml 수동(workflow_dispatch)으로만 실행되는 "제작 과정 상상 재현" 단독 워크플로
+.github/workflows/duo-video.yml     수동(workflow_dispatch)으로만 실행 — 그림 하나로 두 쇼츠를 함께 생성
 ```
 
-## "제작 과정 상상 재현" 영상 (별도 파이프라인)
+## "제작 과정 상상 재현"("그리는 방법") 영상 (별도 파이프라인)
 
-완성된 명화를 보고 "이 그림은 언제·왜·어떻게 만들어졌고, 그 안에 어떤 숨은 이야기가
-있는지"를 하나로 엮어서 보여주는 영상입니다. 기존 "숨은 의미만 설명하는" 파이프라인의
-발전된 버전으로 볼 수 있습니다 — 숨은 이야기 하나만 던지고 끝나는 게 아니라, 언제(시기) ·
-왜(동기/맥락) · 어떻게(작가가 관찰하고 스케치부터 시작해서 완성까지 상상으로 재구성한 기법)
-만들어졌는지를 먼저 보여준 뒤, 그 위에 숨은 이야기(reveal)를 얹습니다. 실행 파일과 사용
-데이터는 기존 "숨은 의미" 영상과 완전히 별도의 파이프라인이며, 위의 API 키
-(Anthropic/Gemini/YouTube)를 그대로 재사용합니다.
+완성된 명화를 보고 "이 그림은 언제·왜·어떻게 만들어졌는지"를 보여주는 영상입니다. 그림의
+숨은 의미(상징/디테일 해석)는 다루지 않습니다 — 그건 완전히 별도인 "숨은 의미" 파이프라인
+(`scripts/generate-video.mjs`)의 몫이고, 이 파이프라인은 오직 제작 과정(WHEN/WHY/HOW)에만
+집중합니다. 같은 그림에 대해 "그리는 방법" 쇼츠와 "숨은 의미" 쇼츠를 짝지어 한 번에 만들고
+싶다면 아래 [짝지어 만들기](#짝지어-만들기-그리는-방법--숨은-의미) 섹션의
+`generate-duo-video.mjs`를 쓰세요. 실행 파일은 별도 파이프라인이지만, 그림 선정 목록
+(`data/used-paintings.json`)은 "숨은 의미" 파이프라인과 공유하며, 위의 API 키
+(Anthropic/Gemini/YouTube)도 그대로 재사용합니다.
 
 **작동 방식**
-1. Met에서 아직 이 형식으로 안 쓴 그림을 하나 고릅니다 (`data/used-paintings-process.json`으로
-   별도 관리 — "숨은 의미" 영상 목록과는 독립적이라, 같은 그림이 두 형식에 각각 쓰일 수 있습니다).
+1. Met에서 아직 어느 형식으로도 안 쓴 그림을 하나 고릅니다 (`data/used-paintings.json`을
+   "숨은 의미" 파이프라인과 공유 — 그림 하나가 한쪽에서 이미 쓰였으면 다른 쪽에서도 다시
+   뽑히지 않습니다).
 2. Claude가 대본을 쓰기 전에 먼저 이 그림에 실제로 알려진 근거("techniqueBasis")를 명시합니다 —
    메타데이터의 실제 매체(예: 유화/템페라)와, 작가/시대가 속한 화파의 잘 알려진 제작 관행
    (예: 인상파는 밑그림 없이 알라 프리마로 바로 채색, 르네상스 패널화는 밑그림을 옮긴 뒤
    여러 겹 글레이징). 이후 스케치/밑칠/마무리 단계와 그 이미지 생성 프롬프트가 전부 이
    근거를 따르도록 강제합니다 — 모든 그림에 똑같은 "스케치→색칠→완성" 패턴을 적용하지 않고,
    화파마다 실제로 알려진 제작 방식이 반영됩니다.
-3. 7단계 대본을 씁니다: (1) identify — 언제: 완성작 소개 → (2) reference — 왜: 누구를
+3. 6단계 대본을 씁니다: (1) identify — 언제: 완성작 소개 → (2) reference — 왜: 누구를
    위해/어떤 동기·맥락으로 그려졌을지 + 작가가 뭘 관찰·참고했을지 → (3~5) sketch/
    underpainting/refine — 어떻게: 초기 단계(밑그림 또는 화파에 따라 바로 색 블로킹) →
-   밑칠/명암 단계 → 마무리 직전 단계 → (6) reveal — 숨은 이야기: 완성작에 실제로 보이는
-   상징/디테일 하나를 짚어서 그 의미를 설명(기존 "숨은 의미" 영상의 REVEAL과 같은 성격) →
-   (7) finish — 완성작으로 복귀해 언제·왜·어떻게·숨은 이야기를 하나로 엮어 마무리. 유튜브
-   쇼츠에 맞게 인트로/아웃트로 카드를 포함해 전체 영상이 1~2분 사이가 되도록 나레이션
-   분량을 맞춥니다.
+   밑칠/명암 단계 → 마무리 직전 단계 → (6) finish — 완성작으로 복귀해 언제·왜·어떻게를
+   하나로 엮어 마무리. 숨은 의미/상징은 다루지 않습니다. 유튜브 쇼츠에 맞게 인트로/아웃트로
+   카드를 포함해 전체 영상이 1~2분 사이가 되도록 나레이션 분량을 맞춥니다.
 4. "초기 단계"/"밑칠"/"마무리 직전" 3단계는 실제로 존재하는 이미지가 아니므로, Gemini 이미지
    생성 모델이 techniqueBasis에 맞는 이미지를 새로 그립니다 — 각 단계마다 딱 1장이 아니라
    3장(진행 컷)을 순서대로 체이닝해서 생성합니다: 매번 완성작(항상 목표로 유지)과 직전
@@ -221,6 +223,35 @@ npm run generate:process
   `extractImageBase64()`만 살짝 고치면 됩니다.
 - 이 형식은 "숨은 의미" 영상에 있는 그림 적합성(다인물/서사 밀도) 사전 심사가 없습니다 —
   제작 과정 상상은 인물 수와 크게 상관없이 대부분의 그림에 적용할 수 있기 때문입니다.
+  단, [짝지어 만들기](#짝지어-만들기-그리는-방법--숨은-의미)로 실행할 때는 "숨은 의미" 쪽
+  심사를 함께 통과해야 그림이 확정됩니다.
+
+## 짝지어 만들기 (그리는 방법 + 숨은 의미)
+
+그림 하나를 고른 뒤 "그리는 방법" 쇼츠와 "숨은 의미" 쇼츠를 순서대로 만들어 각각
+YouTube에 비공개로 업로드하는 오케스트레이터입니다 (`scripts/generate-duo-video.mjs`).
+위 두 파이프라인을 매번 따로 실행해서 그림을 수동으로 맞출 필요 없이, 한 번 실행으로
+같은 그림에 대한 두 쇼츠를 짝지어 얻고 싶을 때 씁니다.
+
+**작동 방식**
+1. Met에서 아직 어느 형식으로도 안 쓴 그림을 하나 고르고, "숨은 의미" 쪽 적합성 심사
+   (다인물/서사/상징 밀도)를 통과하는지 먼저 확인합니다.
+2. 같은 그림에 대해 "숨은 의미" 대본(`generateVideoScript`)과 "그리는 방법" 대본
+   (`generateProcessScript`)을 순서대로 받습니다. 둘 중 하나라도 실패하면(민감한 소재 등)
+   그 그림은 통째로 건너뛰고 다른 그림으로 재시도합니다 — 두 쇼츠는 항상 같은 그림이어야
+   하기 때문입니다.
+3. "숨은 의미" 쇼츠를 먼저 조립해서 업로드하고, 이어서 "그리는 방법" 쇼츠를 조립해서
+   업로드합니다 (각각 `generate-video.mjs` / `generate-process-video.mjs`의 조립·업로드
+   로직을 그대로 재사용).
+4. 그림 하나에 대해 두 영상 ID를 모두 기록한 항목 하나를 `data/used-paintings.json`에
+   남기고, `data/log.md`와 `data/log-process.md`에 각각 한 줄씩 추가합니다.
+
+**실행 방법**
+```bash
+npm run generate:duo
+```
+또는 저장소 **Actions 탭 → Generate masterpiece duo shorts (process + hidden meaning) →
+Run workflow**.
 
 ## 로컬에서 다시 테스트하기
 
