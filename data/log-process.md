@@ -6,3 +6,4 @@
 | 2026-09-10 | Studies for the Libyan Sibyl (recto); Studies for the Libyan Sibyl and a small Sketch for a Seated Figure (verso) | Michelangelo Buonarroti | [NouXZYqW5FY](https://studio.youtube.com/video/NouXZYqW5FY/edit) |
 | 2026-09-10 | Soap Bubbles | Jean Siméon Chardin | [OzRG-X1gr8c](https://studio.youtube.com/video/OzRG-X1gr8c/edit) |
 | 2026-09-10 | Hunting and fishing scenes | Robert Jones | [n_Uuf8Ji2Sk](https://studio.youtube.com/video/n_Uuf8Ji2Sk/edit) |
+| 2026-09-10 | The Holy Family with the Young Saint John the Baptist | Andrea del Sarto (Andrea d'Agnolo) | [2NU0h7rQ5Js](https://studio.youtube.com/video/2NU0h7rQ5Js/edit) |
