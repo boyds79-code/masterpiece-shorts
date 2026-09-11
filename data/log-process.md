@@ -10,3 +10,4 @@
 | 2026-09-11 | Xantil (deity censer) | Eastern Nahua artist(s) | [AbeTr1IpnMU](https://studio.youtube.com/video/AbeTr1IpnMU/edit) |
 | 2026-09-11 | Antigraceful | Umberto Boccioni | [FWtgV-SxZ4U](https://studio.youtube.com/video/FWtgV-SxZ4U/edit) |
 | 2026-09-11 | Queen Henrietta Maria | Anthony van Dyck | [LOJf6M-r1v8](https://studio.youtube.com/video/LOJf6M-r1v8/edit) |
+| 2026-09-11 | ex "Kurtz" Violin | Andrea Amati | [V8rpfnuT9-o](https://studio.youtube.com/video/V8rpfnuT9-o/edit) |
