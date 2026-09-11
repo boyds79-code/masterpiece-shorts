@@ -9,7 +9,6 @@
     "generate:batch": "node scripts/generate-batch.mjs",
     "get-youtube-token": "node scripts/get-youtube-token.mjs",
     "generate:process": "node scripts/generate-process-video.mjs",
-    "generate:duo": "node scripts/generate-duo-video.mjs",
     "generate:longform": "node scripts/generate-longform-video.mjs"
   },
   "dependencies": {

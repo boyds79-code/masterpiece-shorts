@@ -11,9 +11,9 @@ export const PROCESS_STEPS_PER_STAGE = 3;
  * Claude(vision)에게 완성된 명화 이미지 + 메타데이터를 보여주고, "이 그림이 언제·왜·어떻게
  * 만들어졌는지"를 하나로 엮은 영상 대본을 받아옵니다. 그림의 숨은 의미(상징/디테일 해석)는
  * 완전히 별도의 파이프라인(anthropic.mjs의 generateVideoScript, "숨은 의미" 쇼츠)이 담당하고,
- * 이 파이프라인은 오직 제작 과정(WHEN/WHY/HOW)에만 집중합니다 — 같은 그림에 대해 "그리는
- * 방법" 쇼츠와 "숨은 의미" 쇼츠를 짝지어 만드는 generate-duo-video.mjs가 이 파이프라인과
- * anthropic.mjs의 generateVideoScript를 순서대로 호출해서 사용합니다.
+ * 이 파이프라인은 오직 제작 과정(WHEN/WHY/HOW)에만 집중합니다. 이 파일의
+ * PROCESS_STEPS_PER_STAGE 상수는 통합 긴 영상 대본(longform-script.mjs)의 sketch/
+ * underpainting/refine 단계에서도 그대로 재사용됩니다.
  *
  * 제작 과정(스케치/밑칠/마무리) 부분은 실제 기록이 아니라, 완성작에서 보이는 화풍/기법/구도를
  * 근거로 "이런 순서로 이렇게 그려졌을 것 같다"고 추정하는 것이므로, 시스템 프롬프트에서

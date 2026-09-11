@@ -57,7 +57,7 @@ async function makeVisionCopy(originalPath, outPath) {
 }
 
 // 숨은 의미 리빌 4개를 포함하는 만큼(사전 적합성 심사 대상) + 대본 생성 자체가 거부될
-// 가능성(민감한 소재)까지 감안해서, 기존 duo 파이프라인과 같은 넉넉한 시도 횟수를 씁니다.
+// 가능성(민감한 소재)까지 감안해서 넉넉한 시도 횟수를 씁니다.
 const MAX_PAINTING_ATTEMPTS = 8;
 
 // 긴 영상/그리는 방법 티저는 스케치·밑칠·마무리 직전 단계에 AI가 생성한 이미지를 담고
@@ -115,12 +115,9 @@ function buildFinalMeaningTeaserDescription(claudeDescription, fullTitle) {
 
 /**
  * 영상 3개(그림 선정 -> 통합 대본 -> 스케치/밑칠/마무리 이미지 생성 -> 나레이션 -> 긴 영상 +
- * 티저 쇼츠 2개 조립 -> YouTube 업로드 3회)를 처음부터 끝까지 만듭니다.
- *
- * 기존 "duo" 파이프라인(generate-duo-video.mjs)과의 차이: duo는 같은 그림에 대해 서로
- * 독립적인 "온전한 길이의 쇼츠 2개"를 만들지만, 이 파이프라인은 "긴 영상 1개(3분 이상) +
- * 그 영상에서 발췌한 짧은 티저 쇼츠 2개"를 만듭니다 — 쇼츠로 우연히 채널을 접한 사람이
- * 관심이 있으면 같은 그림의 긴 영상을 찾아볼 수 있도록 유도하는 것이 목적입니다.
+ * 티저 쇼츠 2개 조립 -> YouTube 업로드 3회)를 처음부터 끝까지 만듭니다. "긴 영상 1개(3분
+ * 이상) + 그 영상에서 발췌한 짧은 티저 쇼츠 2개"를 만듭니다 — 쇼츠로 우연히 채널을 접한
+ * 사람이 관심이 있으면 같은 그림의 긴 영상을 찾아볼 수 있도록 유도하는 것이 목적입니다.
  *
  * @returns {Promise<{ painting: object, script: object, uploads: object } | null>}
  */
@@ -263,7 +260,7 @@ export async function generateOneLongformVideo() {
  * 긴 대본(script) + 이미 선정된 그림/이미지(원본, vision용 축소본)로부터 스케치/밑칠/마무리
  * 진행 컷 이미지 생성 -> 전체 10개 세그먼트 나레이션 오디오 생성 -> 긴 영상 + 티저 쇼츠 2개
  * 조립 -> YouTube에 3개 모두 업로드(영상/자막/썸네일)까지 처리합니다.
- * generateOneLongformVideo()가 내부적으로 이 함수를 씁니다 — 다른 duo/process 파이프라인의
+ * generateOneLongformVideo()가 내부적으로 이 함수를 씁니다 — 다른 파이프라인의
  * buildAndUpload*() 함수들과 마찬가지로, 그림 선정/대본 생성 로직은 이 함수에 없습니다.
  *
  * workDir은 호출자가 만들어서 넘겨야 하고, 성공/실패와 무관하게 이 함수가 끝나면서

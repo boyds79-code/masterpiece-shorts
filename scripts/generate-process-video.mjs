@@ -13,11 +13,10 @@ import { uploadVideo, uploadCaptions, uploadThumbnail } from './lib/youtube-uplo
 const execFileAsync = promisify(execFile);
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-// 기존 "숨은 의미" 영상(generate-video.mjs)과 같은 목록(data/used-paintings.json)을
-// 공유합니다 — 이제 두 형식은 같은 그림에 대해 "그리는 방법" 쇼츠와 "숨은 의미" 쇼츠로
-// 짝지어 만들어지므로(generate-duo-video.mjs), 그림 하나가 어느 한쪽에서든 이미 쓰였으면
-// 다른 쪽에서도 다시 뽑히지 않도록 선정 목록 자체를 통합했습니다. 사람이 보는 로그
-// (data/log.md vs data/log-process.md)는 형식별로 분리된 채 유지합니다.
+// 기존 "숨은 의미" 영상(generate-video.mjs), 긴 영상 파이프라인(generate-longform-video.mjs)과
+// 같은 목록(data/used-paintings.json)을 공유합니다 — 그림 하나가 어느 파이프라인에서든
+// 이미 쓰였으면 다른 파이프라인에서도 다시 뽑히지 않도록 선정 목록 자체를 통합했습니다.
+// 사람이 보는 로그(data/log.md vs data/log-process.md)는 형식별로 분리된 채 유지합니다.
 const USED_PATH = path.join(ROOT, 'data', 'used-paintings.json');
 const LOG_PATH = path.join(ROOT, 'data', 'log-process.md');
 
@@ -187,9 +186,9 @@ export async function generateOneProcessVideo() {
  * "제작 과정" 대본(script) + 이미 선정된 그림/이미지(원본, vision용 축소본)로부터 스케치/
  * 밑칠/마무리 진행 컷 이미지 생성 -> 나레이션 오디오 생성 -> 영상 조립 -> YouTube 업로드
  * (영상/자막/썸네일)까지 처리합니다. generateOneProcessVideo()가 내부적으로 이 함수를
- * 쓰고, generate-duo-video.mjs(그림 하나로 두 쇼츠를 만드는 오케스트레이터)도 그림 선정을
- * 직접 한 뒤 이 함수를 재사용합니다 — 그래서 그림 선정/대본 생성 로직은 이 함수에 없고,
- * 호출자가 이미 만든 painting/script/imagePath/visionPath를 받기만 합니다.
+ * 쓰며, 그림 선정/대본 생성 로직과 분리해 둔 덕에 그림 선정을 직접 하는 다른
+ * 오케스트레이터도 이미 만든 painting/script/imagePath/visionPath만 넘겨서 재사용할 수
+ * 있습니다.
  *
  * workDir은 호출자가 만들어서 넘겨야 하고, 성공/실패와 무관하게 이 함수가 끝나면서
  * (finally) 삭제합니다 — 호출자는 그 안의 파일을 이 함수 호출 이후에 쓰면 안 됩니다.

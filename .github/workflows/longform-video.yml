@@ -3,7 +3,7 @@ name: Generate masterpiece longform video + teaser shorts
 # 자동 스케줄 없이, Actions 탭에서 "Run workflow"를 눌러 원할 때만 수동으로 실행합니다.
 # 그림 하나를 골라 긴 영상(3분 이상, WHEN+WHY+HOW+숨은 의미) 1개와, 그 영상에서 발췌한
 # 티저 쇼츠 2개("그리는 방법" / "숨은 의미")를 만들어 각각 비공개로 업로드합니다
-# (daily-video.yml / process-video.yml / duo-video.yml과 동일한 "자동 초안 + 사람 검수" 철학).
+# (daily-video.yml / process-video.yml과 동일한 "자동 초안 + 사람 검수" 철학).
 on:
   workflow_dispatch: {}
 
@@ -14,7 +14,7 @@ jobs:
   generate-and-upload:
     runs-on: ubuntu-latest
     # 세그먼트 10개 나레이션 + 이미지 생성(3단계) + 영상 3개 조립/업로드까지 처리하므로
-    # 기존 process/duo 워크플로우보다 넉넉하게 잡습니다.
+    # 기존 process 워크플로우보다 넉넉하게 잡습니다.
     timeout-minutes: 40
     steps:
       - name: Checkout

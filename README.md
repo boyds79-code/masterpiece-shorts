@@ -141,7 +141,6 @@ git push -u origin main
 ```
 scripts/generate-video.mjs      "숨은 의미" 파이프라인 (그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드)
 scripts/generate-process-video.mjs  "제작 과정 상상 재현"("그리는 방법") 파이프라인 (아래 별도 섹션 참고)
-scripts/generate-duo-video.mjs  그림 하나로 위 두 쇼츠(그리는 방법 + 숨은 의미)를 짝지어 만드는 오케스트레이터
 scripts/generate-longform-video.mjs 그림 하나로 긴 영상 1개 + 그 영상에서 발췌한 티저 쇼츠 2개를 만드는 오케스트레이터
 scripts/get-youtube-token.mjs   최초 1회 로컬 실행용 OAuth refresh token 발급 스크립트
 scripts/lib/met-api.mjs         메트로폴리탄 미술관 Open Access API
@@ -159,7 +158,6 @@ data/log-process.md             "제작 과정 상상 재현" 영상 생성 기�
 data/log-longform.md            "긴 영상 + 티저 쇼츠 2개" 생성 기록 (자동 갱신)
 .github/workflows/daily-video.yml   수동(workflow_dispatch)으로만 실행되는 "숨은 의미" 단독 워크플로
 .github/workflows/process-video.yml 수동(workflow_dispatch)으로만 실행되는 "제작 과정 상상 재현" 단독 워크플로
-.github/workflows/duo-video.yml     수동(workflow_dispatch)으로만 실행 — 그림 하나로 두 쇼츠를 함께 생성
 .github/workflows/longform-video.yml 수동(workflow_dispatch)으로만 실행 — 긴 영상 1개 + 티저 쇼츠 2개를 함께 생성
 ```
 
@@ -168,9 +166,7 @@ data/log-longform.md            "긴 영상 + 티저 쇼츠 2개" 생성 기록 
 완성된 명화를 보고 "이 그림은 언제·왜·어떻게 만들어졌는지"를 보여주는 영상입니다. 그림의
 숨은 의미(상징/디테일 해석)는 다루지 않습니다 — 그건 완전히 별도인 "숨은 의미" 파이프라인
 (`scripts/generate-video.mjs`)의 몫이고, 이 파이프라인은 오직 제작 과정(WHEN/WHY/HOW)에만
-집중합니다. 같은 그림에 대해 "그리는 방법" 쇼츠와 "숨은 의미" 쇼츠를 짝지어 한 번에 만들고
-싶다면 아래 [짝지어 만들기](#짝지어-만들기-그리는-방법--숨은-의미) 섹션의
-`generate-duo-video.mjs`를 쓰세요. 실행 파일은 별도 파이프라인이지만, 그림 선정 목록
+집중합니다. 실행 파일은 별도 파이프라인이지만, 그림 선정 목록
 (`data/used-paintings.json`)은 "숨은 의미" 파이프라인과 공유하며, 위의 API 키
 (Anthropic/Gemini/YouTube)도 그대로 재사용합니다.
 
@@ -227,45 +223,14 @@ npm run generate:process
   `extractImageBase64()`만 살짝 고치면 됩니다.
 - 이 형식은 "숨은 의미" 영상에 있는 그림 적합성(다인물/서사 밀도) 사전 심사가 없습니다 —
   제작 과정 상상은 인물 수와 크게 상관없이 대부분의 그림에 적용할 수 있기 때문입니다.
-  단, [짝지어 만들기](#짝지어-만들기-그리는-방법--숨은-의미)로 실행할 때는 "숨은 의미" 쪽
-  심사를 함께 통과해야 그림이 확정됩니다.
-
-## 짝지어 만들기 (그리는 방법 + 숨은 의미)
-
-그림 하나를 고른 뒤 "그리는 방법" 쇼츠와 "숨은 의미" 쇼츠를 순서대로 만들어 각각
-YouTube에 비공개로 업로드하는 오케스트레이터입니다 (`scripts/generate-duo-video.mjs`).
-위 두 파이프라인을 매번 따로 실행해서 그림을 수동으로 맞출 필요 없이, 한 번 실행으로
-같은 그림에 대한 두 쇼츠를 짝지어 얻고 싶을 때 씁니다.
-
-**작동 방식**
-1. Met에서 아직 어느 형식으로도 안 쓴 그림을 하나 고르고, "숨은 의미" 쪽 적합성 심사
-   (다인물/서사/상징 밀도)를 통과하는지 먼저 확인합니다.
-2. 같은 그림에 대해 "숨은 의미" 대본(`generateVideoScript`)과 "그리는 방법" 대본
-   (`generateProcessScript`)을 순서대로 받습니다. 둘 중 하나라도 실패하면(민감한 소재 등)
-   그 그림은 통째로 건너뛰고 다른 그림으로 재시도합니다 — 두 쇼츠는 항상 같은 그림이어야
-   하기 때문입니다.
-3. "숨은 의미" 쇼츠를 먼저 조립해서 업로드하고, 이어서 "그리는 방법" 쇼츠를 조립해서
-   업로드합니다 (각각 `generate-video.mjs` / `generate-process-video.mjs`의 조립·업로드
-   로직을 그대로 재사용).
-4. 그림 하나에 대해 두 영상 ID를 모두 기록한 항목 하나를 `data/used-paintings.json`에
-   남기고, `data/log.md`와 `data/log-process.md`에 각각 한 줄씩 추가합니다.
-
-**실행 방법**
-```bash
-npm run generate:duo
-```
-또는 저장소 **Actions 탭 → Generate masterpiece duo shorts (process + hidden meaning) →
-Run workflow**.
 
 ## 긴 영상 + 티저 쇼츠 2개 만들기 (long-form + shorts teasers)
 
-`generate-duo-video.mjs`("짝지어 만들기")는 같은 그림에 대해 서로 **독립적인, 각자 온전한
-길이의 쇼츠 두 개**를 만듭니다. 이 파이프라인(`scripts/generate-longform-video.mjs`)은
-그것과 다른 목적을 가진 별도의 오케스트레이터로, **긴 영상 하나(3분 이상, WHEN+WHY+HOW+
-숨은 의미를 모두 담은 완결된 이야기) + 그 긴 영상에서 그대로 발췌한 짧은 티저 쇼츠 두 개**를
-만듭니다. 검색으로 채널에 들어오는 사람은 적고, 대부분 쇼츠를 우연히 보고 채널을
-발견하기 때문에 — 그 쇼츠를 보고 관심이 생긴 사람이 같은 그림을 다룬 긴 영상을 찾아볼 수
-있게 유도하는 것이 목적입니다.
+그림 하나를 고른 뒤 **긴 영상 하나(3분 이상, WHEN+WHY+HOW+숨은 의미를 모두 담은 완결된
+이야기) + 그 긴 영상에서 그대로 발췌한 짧은 티저 쇼츠 두 개**를 만들어 각각 YouTube에
+비공개로 업로드하는 오케스트레이터입니다 (`scripts/generate-longform-video.mjs`). 검색으로
+채널에 들어오는 사람은 적고, 대부분 쇼츠를 우연히 보고 채널을 발견하기 때문에 — 그 쇼츠를
+보고 관심이 생긴 사람이 같은 그림을 다룬 긴 영상을 찾아볼 수 있게 유도하는 것이 목적입니다.
 
 **왜 대본을 하나만 만드나요?** 세 결과물(긴 영상 + 티저 2개)이 서로 다른 이야기를 하면
 안 되고, 같은 "하나의 완결된 설명"에서 구간만 다르게 잘라 써야 합니다. 그래서
