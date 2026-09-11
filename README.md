@@ -14,7 +14,9 @@ YouTube Studio에서 직접 확인한 뒤 공개로 전환해야 실제로 사�
 1. 로컬(`npm run generate`)이나 GitHub Actions **Actions 탭 → Run workflow**로 원할
    때마다 수동으로 실행합니다 (자동 스케줄 없음).
 2. 메트로폴리탄 미술관(Met) Open Access API에서, 아직 쓰지 않은 "하이라이트(대표작)"
-   유화 중 하나를 무작위로 고릅니다. `isPublicDomain: true`인 작품만 사용합니다 (CC0, API 키 불필요).
+   회화 중 하나를 무작위로 고릅니다. `isPublicDomain: true`인 작품만 사용하고(CC0, API 키
+   불필요), classification/objectName을 한 번 더 확인해서 조각·구조물 등 회화가 아닌
+   오브제는 제외합니다 — "명화(그림)" 기준을 회화로만 한정합니다.
 3. 그 그림 이미지를 Claude에게 실제로 보여주고, 진짜 그 그림에 있는 디테일(표정, 손,
    배경, 상징물, 붓터치 등)을 근거로 전체 소개 → 배경 설명 → 숨은 의미 reveal → 마무리
    순서의 7~10개 구간짜리 나레이션 대본과 각 구간이 확대할 영역(bbox)을 받습니다.

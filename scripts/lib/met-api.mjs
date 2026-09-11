@@ -33,6 +33,28 @@ export async function getObject(objectId) {
   return fetchJson(`${BASE}/objects/${objectId}`);
 }
 
+// European Paintings(11) 부서로 검색을 좁혀도, 조각적 요소가 있는 패널/제단화나
+// 틀(프레임)처럼 실제로는 회화가 아닌 오브제가 드물게 섞여 있을 수 있습니다 — 이 채널은
+// "명화(그림)"만 다루므로, classification/objectName 필드로 실제 회화인지 한 번 더
+// 확인하고 조각/구조물류로 분류된 작품은 명시적으로 제외합니다.
+const NON_PAINTING_KEYWORDS = [
+  'sculpture',
+  'statue',
+  'bust',
+  'relief',
+  'architecture',
+  'architectural',
+  'structure',
+];
+
+function isActualPainting(obj) {
+  const classification = (obj.classification || '').toLowerCase();
+  const objectName = (obj.objectName || '').toLowerCase();
+  const combined = `${classification} ${objectName}`;
+  if (NON_PAINTING_KEYWORDS.some((kw) => combined.includes(kw))) return false;
+  return combined.includes('painting');
+}
+
 // 실제로 영상 소재로 쓸 수 있는 조건을 만족하는지 검증합니다.
 export function isUsable(obj) {
   return Boolean(
@@ -41,7 +63,8 @@ export function isUsable(obj) {
       obj.primaryImage &&
       obj.primaryImage.length > 0 &&
       obj.title &&
-      obj.artistDisplayName
+      obj.artistDisplayName &&
+      isActualPainting(obj)
   );
 }
 
