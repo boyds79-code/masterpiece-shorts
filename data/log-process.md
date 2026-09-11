@@ -12,3 +12,4 @@
 | 2026-09-11 | Queen Henrietta Maria | Anthony van Dyck | [LOJf6M-r1v8](https://studio.youtube.com/video/LOJf6M-r1v8/edit) |
 | 2026-09-11 | ex "Kurtz" Violin | Andrea Amati | [V8rpfnuT9-o](https://studio.youtube.com/video/V8rpfnuT9-o/edit) |
 | 2026-09-11 | Woods and Valleys of Mount Yu | Ni Zan | [r0HovGwqv6E](https://studio.youtube.com/video/r0HovGwqv6E/edit) |
+| 2026-09-11 | Bedroom from the Sagredo Palace | Abbondio Stazio | [K8wMt2cL5wo](https://studio.youtube.com/video/K8wMt2cL5wo/edit) |
