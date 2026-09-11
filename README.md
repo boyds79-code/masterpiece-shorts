@@ -211,11 +211,34 @@ data/log-longform.md            "긴 영상 + 티저 쇼츠 2개" 생성 기록 
 - (추가로) Claude에게 나레이션 자체도 단정적 서술이 아니라 "~였을 것이다" 같은 추정
   어조로 쓰도록 지시하지만, 위 4가지는 대본 내용과 무관하게 항상 강제로 적용됩니다.
 
-**실행 방법**
+**자동 실행 — 하루 5회**
+이 파이프라인은 `.github/workflows/process-video.yml`의 `schedule`로 **하루 5번(4시간
+간격, UTC 01:05/05:05/09:05/13:05/17:05) 자동으로 실행**됩니다. 블로그 프로젝트들의
+"매일 초안 자동 생성"과 같은 철학이지만, 개수는 8이 아니라 5입니다 — 이유는 아래
+"쿼터 한도" 참고. 언제든 저장소 **Actions 탭 → Generate masterpiece process-recreation
+short → Run workflow**로 추가 수동 실행도 가능합니다 (예약 실행과 겹치지 않도록
+`concurrency`로 동시 실행은 막아둡니다).
+
+로컬에서 한 번만 돌리고 싶다면:
 ```bash
 npm run generate:process
 ```
-또는 저장소 **Actions 탭 → Generate masterpiece process-recreation short → Run workflow**.
+
+**쿼터 한도 — 왜 8개가 아니라 5개인가요**
+YouTube Data API의 기본 일일 쿼터는 **10,000 units**이고, 영상 하나를 올릴 때
+`videos.insert`(1,600) + `captions.insert`(200) + `thumbnails.set`(50) = **약 1,850
+units**가 듭니다. 5회 × 1,850 = 9,250 units로 기본 쿼터 안에 안전하게 들어오지만, 6회부터는
+(11,100 units) 초과할 위험이 있습니다. 쿼터는 태평양 표준시 자정에 초기화됩니다. 하루 8개
+이상 원한다면 [Google Cloud Console에서 이 프로젝트의 YouTube Data API 쿼터 증설을 먼저
+신청](https://support.google.com/youtube/contact/yt_api_form)하세요 (검토에 며칠 걸릴 수
+있습니다) — 승인되면 위 워크플로 파일의 `cron` 줄을 늘리기만 하면 됩니다.
+
+**그림 소진 속도 참고**
+하루 5개씩 자동으로 그림을 소비하므로, 수동으로 가끔 돌릴 때보다 "아직 안 쓴 하이라이트
+그림" 풀이 훨씬 빨리 줄어듭니다. `pickUnusedPainting()`이 더 이상 고를 그림이 없으면
+`null`을 반환하고 그 실행은 조용히 아무것도 안 올린 채 끝납니다 — 이 상태가 되면
+`scripts/lib/met-api.mjs`의 `DEPARTMENT_IDS`에 다른 부서(예: 미국 회화, 근대 유럽 회화 등)를
+추가해서 소재 풀을 늘려야 합니다.
 
 **참고**
 - `GEMINI_IMAGE_MODEL`은 비교적 최근에 나온 Gemini 이미지 생성 API를 씁니다 — 처음

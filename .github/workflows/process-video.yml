@@ -1,13 +1,36 @@
 name: Generate masterpiece process-recreation short
 
-# 자동 스케줄 없이, Actions 탭에서 "Run workflow"를 눌러 원할 때만 수동으로 실행합니다.
-# (daily-video.yml과 동일한 "자동 초안 + 사람 검수" 철학 — 이 형식은 AI가 생성한 이미지가
-# 들어가므로 특히 첫 몇 개는 꼭 직접 확인 후 공개로 전환하세요.)
+# 하루 5회 자동 실행 + 언제든 Actions 탭에서 "Run workflow"로 수동 실행도 가능합니다.
+# (daily-video.yml과 동일한 "자동 초안 + 사람 검수" 철학 — 업로드는 항상 YOUTUBE_PRIVACY_STATUS
+# (기본 private)로 올라가고 자동으로 공개되지 않으므로, 사람이 YouTube Studio에서 확인 후
+# 공개로 전환해야 실제로 노출됩니다. 이 형식은 AI가 생성한 이미지가 들어가므로 특히 처음
+# 몇 개는 꼭 직접 확인해보세요.)
+#
+# 하루 5회로 정한 이유(쿼터): YouTube Data API의 기본 일일 쿼터는 10,000 units이고,
+# 영상 하나를 올릴 때 videos.insert(1,600) + captions.insert(200) + thumbnails.set(50)
+# = 약 1,850 units가 듭니다. 5회 x 1,850 = 9,250 units로 기본 쿼터 안에 안전하게 들어오고,
+# 6회부터는(11,100 units) 초과할 수 있습니다. 더 자주 돌리고 싶다면 Google Cloud Console에서
+# 이 프로젝트의 YouTube Data API 쿼터 증설을 먼저 신청하세요(승인에 며칠 걸릴 수 있습니다).
+#
+# cron은 항상 UTC 기준입니다(https://crontab.guru). 4시간 간격으로 나눠서 API 호출이
+# 한 번에 몰리지 않게 했습니다 — 시간을 바꾸려면 아래 cron 값들을 수정하세요.
 on:
+  schedule:
+    - cron: '5 1 * * *'
+    - cron: '5 5 * * *'
+    - cron: '5 9 * * *'
+    - cron: '5 13 * * *'
+    - cron: '5 17 * * *'
   workflow_dispatch: {}
 
 permissions:
   contents: write
+
+# 예정된 실행과 수동 실행이 겹쳐서 같은 그림을 동시에 건드리거나 커밋이 충돌하는 걸
+# 막기 위해 동시 실행을 막습니다(다른 블로그 프로젝트와 동일한 패턴).
+concurrency:
+  group: process-video
+  cancel-in-progress: false
 
 jobs:
   generate-and-upload:
