@@ -9,3 +9,4 @@
 | 2026-09-10 | The Holy Family with the Young Saint John the Baptist | Andrea del Sarto (Andrea d'Agnolo) | [2NU0h7rQ5Js](https://studio.youtube.com/video/2NU0h7rQ5Js/edit) |
 | 2026-09-11 | Xantil (deity censer) | Eastern Nahua artist(s) | [AbeTr1IpnMU](https://studio.youtube.com/video/AbeTr1IpnMU/edit) |
 | 2026-09-11 | Antigraceful | Umberto Boccioni | [FWtgV-SxZ4U](https://studio.youtube.com/video/FWtgV-SxZ4U/edit) |
+| 2026-09-11 | Queen Henrietta Maria | Anthony van Dyck | [LOJf6M-r1v8](https://studio.youtube.com/video/LOJf6M-r1v8/edit) |
