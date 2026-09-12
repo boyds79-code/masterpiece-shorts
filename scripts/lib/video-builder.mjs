@@ -120,50 +120,28 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   return outPath;
 }
 
-// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 이어붙여서 "실제로 붓으로 칠해지고 있는 것처럼
-// 화면 전체에서 색이 조금씩 번져나가는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을
-// Ken Burns 줌으로 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼 durationSec을 N등분해서
-// 슬롯 0은 첫 이미지를 정지 화면으로 보여주고, 슬롯 1..N-1은 각각 "이전 이미지 -> 이번 이미지"를
-// 슬롯 전체 길이 동안 계속 붓으로 칠해나가는 것처럼 전환합니다(짧게 반짝하고 끝나는 크로스디졸브가
-// 아니라, 그 구간 내내 서서히 칠해집니다). 이미지가 1장뿐이면(예외적인 경우 대비) 전환 없이
-// buildSegmentClip과 동일하게 전체 화면을 그대로 durationSec만큼 보여줍니다.
+// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 이어붙여서, 다음 진행 단계 이미지가 화면
+// 왼쪽에서 슬라이드로 들어오며 이전 이미지를 밀어내는 방식으로 "다음 레이어가 등장하는"
+// 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을 Ken Burns 줌으로 오래 보여주는 것과
+// 달리, 여기서는 이미지 개수(N)만큼을 짧고 분명한 슬라이드 전환으로 이어붙입니다.
 //
-// 전환 방식은 알파 크로스디졸브(fade)나 픽셀 단위 완전 무작위 교체(dissolve)를 쓰지 않습니다 —
-// 둘 다 "이중 노출"이나 "TV 잡음"처럼 보여서 실제 붓터치로 칠해지는 느낌이 나지 않습니다. 대신
-// 매번 새로 생성하는 "붓결 순서 필드"(그레이스케일 이미지 한 장 — 저해상도 무작위 노이즈를
-// 확대하고 가로로 길게 블러를 줘서 실제 붓자국처럼 얼룩덜룩하고 가로로 늘어진 무늬를 만듦)를
-// 기준으로, 그 값이 낮은 픽셀부터 먼저 새 이미지로 바뀌도록 합니다. 진행률(0→1)이 올라가면서
-// 문턱값을 올려가며 "붓자국 무늬를 따라 페인트가 번지고 뭉쳐가며 캔버스를 덮어나가는" 모습이
-// 됩니다(직접 합성 테스트로 확인됨 — 무작위 점 흩뿌림이 아니라 얼룩진 붓자국 형태로 새 색이
-// 번져 들어가는 게 눈으로 확인됨).
+// 예전에는 "붓결 순서 필드"(그레이스케일 노이즈 무늬)를 마스크로 쓴 maskedmerge 전환으로
+// 실제 붓터치를 흉내 냈지만, 실제로는 붓자국이 아니라 화면 군데군데서 색이 스며 나오는
+// "번짐" 효과처럼 보인다는 피드백을 받았습니다. 진짜 붓질처럼 보이게 다듬는 것보다,
+// 각 진행 단계를 또렷하게 오래 멈춰 보여주고 그 사이에만 짧게 넘어가는 편이 "이전 단계 ->
+// 다음 단계"를 훨씬 명확하게 전달합니다 — 그래서 대부분의 시간은 이미지를 정지 화면으로
+// 보여주고, 단계가 바뀔 때만 SLIDE_TRANSITION_SEC 길이의 빠른 슬라이드(ffmpeg xfade의
+// slideright — 다음 이미지가 왼쪽에서 들어오며 이전 이미지를 오른쪽으로 밀어냄)를 넣는
+// 방식으로 바꿨습니다.
 //
-// N장이면 슬롯은 N개, 슬롯 하나당 길이는 정확히 durationSec/N이고 겹치는 구간이 없으므로
-// 최종 길이는 정확히 durationSec입니다(크로스페이드처럼 겹침을 빼는 보정이 필요 없음).
-const BRUSH_FEATHER = 40; // 문턱값 경계를 얼마나 부드럽게(그레이스케일 단계 폭) 만들지
-const BRUSH_FIELD_COLS = 18; // 붓결 순서 필드를 만들 때 쓰는 저해상도 그리드(가로) — 작을수록 얼룩이 큼
-const BRUSH_FIELD_ROWS = 32; // 저해상도 그리드(세로)
-
-// 저해상도 무작위 노이즈를 만든 뒤 확대 + 가로로 길게 블러를 줘서, 실제 붓자국처럼 얼룩덜룩하고
-// 가로로 늘어진 그레이스케일 "순서 필드"를 생성합니다. 매번 다른 seed로 새로 생성해서 매
-// 세그먼트마다 무늬가 달라지게 합니다.
-async function generateBrushOrderField({ outPath, seed }) {
-  const lowResPath = `${outPath}.lowres.png`;
-  await run('ffmpeg', [
-    '-y',
-    '-f', 'lavfi',
-    '-i', `color=size=${BRUSH_FIELD_COLS}x${BRUSH_FIELD_ROWS}:d=1,geq=lum='random(X+Y*${BRUSH_FIELD_COLS}+${seed}*99991)*255':cb=128:cr=128,format=gray`,
-    '-frames:v', '1',
-    lowResPath,
-  ]);
-  await run('ffmpeg', [
-    '-y',
-    '-i', lowResPath,
-    '-vf', `scale=${WIDTH}:${HEIGHT}:flags=bicubic,avgblur=sizeX=60:sizeY=10,gblur=sigma=8,eq=contrast=2.2`,
-    outPath,
-  ]);
-  await fs.promises.unlink(lowResPath).catch(() => {});
-  return outPath;
-}
+// 이미지 i장 각각을 perClipDuration만큼 로드한 뒤, 연속된 두 이미지 사이를
+// transitionSec 길이의 xfade로 겹쳐 이어붙입니다. xfade는 겹치는 구간만큼 전체 길이가
+// 줄어들므로(전환 길이만큼 두 클립이 겹쳐 재생됨), perClipDuration을 다음 식으로 역산해서
+// 최종 길이가 정확히 durationSec이 되도록 맞춥니다:
+//   n * perClipDuration - (n-1) * transitionSec = durationSec
+// 이미지가 1장뿐이면(예외적인 경우 대비) 전환 없이 buildSegmentClip과 동일하게 전체 화면을
+// 그대로 durationSec만큼 보여줍니다.
+const SLIDE_TRANSITION_SEC = 0.4; // 슬라이드 전환 하나의 길이(초) — 짧고 분명하게, 오래 끌지 않도록
 
 export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
   const n = imagePaths.length;
@@ -180,57 +158,34 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
     });
   }
 
-  const perSlot = durationSec / n;
-  const orderFieldPath = `${outPath}.orderfield.png`;
-  await generateBrushOrderField({ outPath: orderFieldPath, seed: Math.floor(Math.random() * 1e6) });
+  const numTransitions = n - 1;
+  // 세그먼트 길이가 아주 짧을 때를 대비해, 전환에 쓰는 총 시간이 durationSec의 40%를
+  // 넘지 않도록 필요하면 전환 하나의 길이를 줄입니다.
+  const transitionSec = Math.min(SLIDE_TRANSITION_SEC, (durationSec * 0.4) / numTransitions);
+  const perClipDuration = (durationSec + numTransitions * transitionSec) / n;
 
   const inputArgs = [];
   for (let i = 0; i < n; i++) {
-    inputArgs.push('-loop', '1', '-t', perSlot.toFixed(3), '-i', imagePaths[i]);
+    inputArgs.push('-loop', '1', '-t', perClipDuration.toFixed(3), '-i', imagePaths[i]);
   }
-  const orderFieldInputIdx = n;
-  inputArgs.push('-loop', '1', '-t', perSlot.toFixed(3), '-i', orderFieldPath);
 
   const filterParts = [];
   for (let i = 0; i < n; i++) {
-    // 슬롯 0의 첫 이미지(정지 화면)와, 뒤이은 전환의 "이전 이미지" 입력으로 각각 한 번씩
-    // 쓰이므로(마지막 이미지 제외) split으로 복제해둡니다.
-    const needsTwoCopies = i < n - 1;
-    if (needsTwoCopies) {
-      filterParts.push(
-        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1,split=2[img${i}held][img${i}prev]`
-      );
-    } else {
-      filterParts.push(
-        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1[img${i}held]`
-      );
-    }
-  }
-
-  const numTransitions = n - 1;
-  filterParts.push(`[${orderFieldInputIdx}:v]scale=${WIDTH}:${HEIGHT},fps=${FPS},format=gray[ordbase]`);
-  if (numTransitions > 1) {
-    const splitLabels = Array.from({ length: numTransitions }, (_, i) => `[ord${i}]`).join('');
-    filterParts.push(`[ordbase]split=${numTransitions}${splitLabels}`);
-  } else {
-    filterParts.push(`[ordbase]copy[ord0]`);
-  }
-
-  const slotLabels = [`img0held`];
-  for (let i = 1; i < n; i++) {
-    const prevLabel = `img${i - 1}prev`;
-    const currLabel = `img${i}held`;
-    const maskRaw = `ord${i - 1}`;
-    const maskLabel = `mask${i}`;
     filterParts.push(
-      `[${maskRaw}]geq=lum='clip((255*T/${perSlot.toFixed(3)} - lum(X,Y) + ${BRUSH_FEATHER / 2})*(255/${BRUSH_FEATHER}),0,255)',format=gray[${maskLabel}]`
+      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1[img${i}]`
     );
-    filterParts.push(`[${prevLabel}][${currLabel}][${maskLabel}]maskedmerge[slot${i}]`);
-    slotLabels.push(`slot${i}`);
   }
 
-  const concatInputs = slotLabels.map((l) => `[${l}]`).join('');
-  filterParts.push(`${concatInputs}concat=n=${n}:v=1:a=0[vout]`);
+  let prevLabel = 'img0';
+  let cumulativeOffset = 0;
+  for (let i = 1; i < n; i++) {
+    const outLabel = i === numTransitions ? 'vout' : `xf${i}`;
+    cumulativeOffset += perClipDuration - transitionSec;
+    filterParts.push(
+      `[${prevLabel}][img${i}]xfade=transition=slideright:duration=${transitionSec.toFixed(3)}:offset=${cumulativeOffset.toFixed(3)}[${outLabel}]`
+    );
+    prevLabel = outLabel;
+  }
 
   await run('ffmpeg', [
     '-y',
@@ -241,8 +196,6 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
     '-r', String(FPS),
     outPath,
   ]);
-
-  await fs.promises.unlink(orderFieldPath).catch(() => {});
 
   return outPath;
 }
@@ -497,7 +450,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
  * - imagePaths: 이 세그먼트에서 보여줄 이미지 경로 배열. 실사진 세그먼트(identify/reference/
  *   finish)는 보통 1장(원본 사진)이라 buildSegmentClip()으로 bbox Ken Burns 줌을 적용합니다.
  *   생성 이미지 세그먼트(sketch/underpainting/refine)는 여러 장(진행 컷)이라
- *   buildTimelapseSegmentClip()으로 빠른 디졸브 타임랩스를 적용합니다.
+ *   buildTimelapseSegmentClip()으로 짧은 슬라이드 전환의 타임랩스를 적용합니다.
  * - bbox: imagePaths가 1장일 때만 의미가 있고, 없으면 전체 화면(x:0,y:0,w:1,h:1)으로 간주합니다.
  *
  * 인트로 카드에는 "AI-Imagined Creation Process"라는 문구를 항상 고정으로 넣어서, 이 영상이
