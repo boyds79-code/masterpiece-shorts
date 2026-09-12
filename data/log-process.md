@@ -14,3 +14,4 @@
 | 2026-09-11 | Woods and Valleys of Mount Yu | Ni Zan | [r0HovGwqv6E](https://studio.youtube.com/video/r0HovGwqv6E/edit) |
 | 2026-09-11 | Bedroom from the Sagredo Palace | Abbondio Stazio | [K8wMt2cL5wo](https://studio.youtube.com/video/K8wMt2cL5wo/edit) |
 | 2026-09-12 | Study for "A Sunday on La Grande Jatte" | Georges Seurat | [1Q1AuxyxXEU](https://studio.youtube.com/video/1Q1AuxyxXEU/edit) |
+| 2026-09-12 | Two Men Contemplating the Moon | Caspar David Friedrich | [WHjrdFt8Owg](https://studio.youtube.com/video/WHjrdFt8Owg/edit) |
