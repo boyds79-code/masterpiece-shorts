@@ -13,3 +13,4 @@
 | 2026-09-11 | ex "Kurtz" Violin | Andrea Amati | [V8rpfnuT9-o](https://studio.youtube.com/video/V8rpfnuT9-o/edit) |
 | 2026-09-11 | Woods and Valleys of Mount Yu | Ni Zan | [r0HovGwqv6E](https://studio.youtube.com/video/r0HovGwqv6E/edit) |
 | 2026-09-11 | Bedroom from the Sagredo Palace | Abbondio Stazio | [K8wMt2cL5wo](https://studio.youtube.com/video/K8wMt2cL5wo/edit) |
+| 2026-09-12 | Study for "A Sunday on La Grande Jatte" | Georges Seurat | [1Q1AuxyxXEU](https://studio.youtube.com/video/1Q1AuxyxXEU/edit) |
