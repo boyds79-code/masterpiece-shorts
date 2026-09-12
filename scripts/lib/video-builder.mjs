@@ -120,46 +120,130 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   return outPath;
 }
 
-// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 이어붙여서, 화면(구도)은 고정된 채로 다음
-// 진행 단계 이미지가 왼쪽에서부터 오른쪽으로 와이퍼처럼 쓸려 나오며 이전 이미지를 덮어
-// 나가는 "다음 레이어가 등장하는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을
-// Ken Burns 줌으로 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼을 짧고 분명한
-// 와이퍼 전환으로 이어붙입니다.
+// 여러 장의 이미지(예: 스케치/밑칠/마무리 진행 컷 3장)를 이어붙여서 타임랩스처럼 보이게
+// 하는데, 두 가지 전환 스타일을 씁니다:
 //
-// 예전에는 "붓결 순서 필드"(그레이스케일 노이즈 무늬)를 마스크로 쓴 maskedmerge 전환으로
-// 실제 붓터치를 흉내 냈지만, 실제로는 붓자국이 아니라 화면 군데군데서 색이 스며 나오는
-// "번짐" 효과처럼 보인다는 피드백을 받았습니다. 그 다음 시도로 화면 전체가 옆으로 밀려나는
-// "슬라이드" 전환(xfade의 slideright)을 넣어봤지만, 원했던 건 화면(구도)이 움직이지 않고
-// 제자리에 그대로 있는 채로 다음 레이어만 와이퍼처럼 훑고 지나가며 드러나는 효과라는 피드백을
-// 받아 다시 바꿨습니다 — 그래서 지금은 이미지 자체는 전혀 이동/평행이동하지 않고, 화면 왼쪽
-// 끝에서 시작해 오른쪽으로 진행하는 수직 경계선이 다음 이미지를 그 뒤에서부터 점점 더 많이
-// 드러내는 xfade의 wiperight 전환을 씁니다. 대부분의 시간은 이미지를 정지 화면으로 보여주고,
-// 단계가 바뀔 때만 WIPE_TRANSITION_SEC 길이만큼 짧게 와이퍼로 넘어갑니다.
+// - 'progressive' (스케치 단계용): 슬롯 전체 길이 동안 계속 조금씩 번져 나가며 캔버스를
+//   덮어가는 점진적 확장 전환입니다. 매번 새로 생성하는 "붓결 순서 필드"(그레이스케일
+//   이미지 한 장 — 저해상도 무작위 노이즈를 확대하고 가로로 길게 블러를 줘서 얼룩덜룩하고
+//   가로로 늘어진 무늬를 만듦)를 기준으로, 그 값이 낮은 픽셀부터 먼저 새 이미지로
+//   바뀌도록 합니다. 스케치처럼 선이 조금씩 늘어나며 그려지는 느낌을 내는 데 적합합니다.
+// - 'wipe' (밑칠/마무리 단계용, 기본값): 화면(구도)은 고정된 채로 다음 진행 단계 이미지가
+//   왼쪽에서부터 오른쪽으로 와이퍼처럼 쓸려 나오며 이전 이미지를 덮는, 대부분의 시간은
+//   정지 화면이고 단계가 바뀔 때만 아주 짧게(WIPE_TRANSITION_SEC) 넘어가는 전환입니다
+//   (ffmpeg xfade의 wiperight). 색을 칠해나가는 단계는 이렇게 또렷하게 딱딱 끊어지는
+//   편이 "이전 단계 -> 다음 단계"를 훨씬 명확하게 보여줍니다.
 //
-// 이미지 i장 각각을 perClipDuration만큼 로드한 뒤, 연속된 두 이미지 사이를
-// transitionSec 길이의 xfade로 겹쳐 이어붙입니다. xfade는 겹치는 구간만큼 전체 길이가
-// 줄어들므로(전환 길이만큼 두 클립이 겹쳐 재생됨), perClipDuration을 다음 식으로 역산해서
-// 최종 길이가 정확히 durationSec이 되도록 맞춥니다:
-//   n * perClipDuration - (n-1) * transitionSec = durationSec
-// 이미지가 1장뿐이면(예외적인 경우 대비) 전환 없이 buildSegmentClip과 동일하게 전체 화면을
-// 그대로 durationSec만큼 보여줍니다.
+// 이 두 스타일을 구분해서 쓰는 이유: 처음엔 'progressive' 하나만 있었는데 실제 붓터치가
+// 아니라 화면 군데군데서 색이 스며 나오는 "번짐" 효과처럼 보인다는 피드백을 받아 전체를
+// 'wipe'(그 전엔 화면 전체가 밀려나는 슬라이드도 시도했었음)로 바꿨습니다. 이후 다시
+// 피드백을 받아, 스케치처럼 "점진적으로 확장되며 그려지는" 단계에는 'progressive'가 더
+// 어울리고, 색을 채워나가는 단계에는 또렷하게 끊어지는 'wipe'가 낫다는 것으로 정리되어
+// 지금처럼 스테이지별로 다른 스타일을 쓰게 됐습니다 — 호출자(assembleProcessVideo /
+// assembleLongformBundle)가 seg.stage를 보고 style을 골라서 넘겨줍니다.
+//
+// buildSegmentClip()이 이미지 1장을 Ken Burns 줌으로 오래 보여주는 것과 달리, 여기서는
+// 이미지 개수(N)만큼을 스타일에 맞게 이어붙입니다. 이미지가 1장뿐이면(예외적인 경우
+// 대비) 스타일과 무관하게 buildSegmentClip과 동일하게 전체 화면을 그대로 durationSec만큼
+// 보여줍니다.
 const WIPE_TRANSITION_SEC = 0.4; // 와이퍼 전환 하나의 길이(초) — 짧고 분명하게, 오래 끌지 않도록
+const BRUSH_FEATHER = 40; // progressive 전환의 문턱값 경계를 얼마나 부드럽게(그레이스케일 단계 폭) 만들지
+const BRUSH_FIELD_COLS = 18; // 붓결 순서 필드를 만들 때 쓰는 저해상도 그리드(가로) — 작을수록 얼룩이 큼
+const BRUSH_FIELD_ROWS = 32; // 저해상도 그리드(세로)
 
-export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
+// 저해상도 무작위 노이즈를 만든 뒤 확대 + 가로로 길게 블러를 줘서, 얼룩덜룩하고 가로로
+// 늘어진 그레이스케일 "순서 필드"를 생성합니다. 매번 다른 seed로 새로 생성해서 매
+// 세그먼트마다 무늬가 달라지게 합니다. 'progressive' 스타일 전용입니다.
+async function generateBrushOrderField({ outPath, seed }) {
+  const lowResPath = `${outPath}.lowres.png`;
+  await run('ffmpeg', [
+    '-y',
+    '-f', 'lavfi',
+    '-i', `color=size=${BRUSH_FIELD_COLS}x${BRUSH_FIELD_ROWS}:d=1,geq=lum='random(X+Y*${BRUSH_FIELD_COLS}+${seed}*99991)*255':cb=128:cr=128,format=gray`,
+    '-frames:v', '1',
+    lowResPath,
+  ]);
+  await run('ffmpeg', [
+    '-y',
+    '-i', lowResPath,
+    '-vf', `scale=${WIDTH}:${HEIGHT}:flags=bicubic,avgblur=sizeX=60:sizeY=10,gblur=sigma=8,eq=contrast=2.2`,
+    outPath,
+  ]);
+  await fs.promises.unlink(lowResPath).catch(() => {});
+  return outPath;
+}
+
+async function buildProgressiveTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
   const n = imagePaths.length;
+  const perSlot = durationSec / n;
+  const orderFieldPath = `${outPath}.orderfield.png`;
+  await generateBrushOrderField({ outPath: orderFieldPath, seed: Math.floor(Math.random() * 1e6) });
 
-  if (n === 1) {
-    const { width, height } = await getImageDimensions(imagePaths[0]);
-    return buildSegmentClip({
-      imagePath: imagePaths[0],
-      imgWidth: width,
-      imgHeight: height,
-      bbox: { x: 0, y: 0, w: 1, h: 1 },
-      durationSec,
-      outPath,
-    });
+  const inputArgs = [];
+  for (let i = 0; i < n; i++) {
+    inputArgs.push('-loop', '1', '-t', perSlot.toFixed(3), '-i', imagePaths[i]);
+  }
+  const orderFieldInputIdx = n;
+  inputArgs.push('-loop', '1', '-t', perSlot.toFixed(3), '-i', orderFieldPath);
+
+  const filterParts = [];
+  for (let i = 0; i < n; i++) {
+    // 슬롯 0의 첫 이미지(정지 화면)와, 뒤이은 전환의 "이전 이미지" 입력으로 각각 한 번씩
+    // 쓰이므로(마지막 이미지 제외) split으로 복제해둡니다.
+    const needsTwoCopies = i < n - 1;
+    if (needsTwoCopies) {
+      filterParts.push(
+        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1,split=2[img${i}held][img${i}prev]`
+      );
+    } else {
+      filterParts.push(
+        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},format=yuv420p,fps=${FPS},setsar=1[img${i}held]`
+      );
+    }
   }
 
+  const numTransitions = n - 1;
+  filterParts.push(`[${orderFieldInputIdx}:v]scale=${WIDTH}:${HEIGHT},fps=${FPS},format=gray[ordbase]`);
+  if (numTransitions > 1) {
+    const splitLabels = Array.from({ length: numTransitions }, (_, i) => `[ord${i}]`).join('');
+    filterParts.push(`[ordbase]split=${numTransitions}${splitLabels}`);
+  } else {
+    filterParts.push(`[ordbase]copy[ord0]`);
+  }
+
+  const slotLabels = [`img0held`];
+  for (let i = 1; i < n; i++) {
+    const prevLabel = `img${i - 1}prev`;
+    const currLabel = `img${i}held`;
+    const maskRaw = `ord${i - 1}`;
+    const maskLabel = `mask${i}`;
+    filterParts.push(
+      `[${maskRaw}]geq=lum='clip((255*T/${perSlot.toFixed(3)} - lum(X,Y) + ${BRUSH_FEATHER / 2})*(255/${BRUSH_FEATHER}),0,255)',format=gray[${maskLabel}]`
+    );
+    filterParts.push(`[${prevLabel}][${currLabel}][${maskLabel}]maskedmerge[slot${i}]`);
+    slotLabels.push(`slot${i}`);
+  }
+
+  const concatInputs = slotLabels.map((l) => `[${l}]`).join('');
+  filterParts.push(`${concatInputs}concat=n=${n}:v=1:a=0[vout]`);
+
+  await run('ffmpeg', [
+    '-y',
+    ...inputArgs,
+    '-filter_complex', filterParts.join(';'),
+    '-map', '[vout]',
+    '-an',
+    '-r', String(FPS),
+    outPath,
+  ]);
+
+  await fs.promises.unlink(orderFieldPath).catch(() => {});
+
+  return outPath;
+}
+
+async function buildWipeTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
+  const n = imagePaths.length;
   const numTransitions = n - 1;
   // 세그먼트 길이가 아주 짧을 때를 대비해, 전환에 쓰는 총 시간이 durationSec의 40%를
   // 넘지 않도록 필요하면 전환 하나의 길이를 줄입니다.
@@ -200,6 +284,27 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
   ]);
 
   return outPath;
+}
+
+export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPath, style = 'wipe' }) {
+  const n = imagePaths.length;
+
+  if (n === 1) {
+    const { width, height } = await getImageDimensions(imagePaths[0]);
+    return buildSegmentClip({
+      imagePath: imagePaths[0],
+      imgWidth: width,
+      imgHeight: height,
+      bbox: { x: 0, y: 0, w: 1, h: 1 },
+      durationSec,
+      outPath,
+    });
+  }
+
+  if (style === 'progressive') {
+    return buildProgressiveTimelapseSegmentClip({ imagePaths, durationSec, outPath });
+  }
+  return buildWipeTimelapseSegmentClip({ imagePaths, durationSec, outPath });
 }
 
 // 타이틀 카드는 fontsize=58, WIDTH=1080px 기준으로 그립니다. drawtext는 자동
@@ -473,7 +578,8 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
  * - imagePaths: 이 세그먼트에서 보여줄 이미지 경로 배열. 실사진 세그먼트(identify/reference/
  *   finish)는 보통 1장(원본 사진)이라 buildSegmentClip()으로 bbox Ken Burns 줌을 적용합니다.
  *   생성 이미지 세그먼트(sketch/underpainting/refine)는 여러 장(진행 컷)이라
- *   buildTimelapseSegmentClip()으로 짧은 와이퍼 전환의 타임랩스를 적용합니다.
+ *   buildTimelapseSegmentClip()으로 타임랩스를 적용합니다 — sketch는 'progressive'
+ *   (점진적 확장), underpainting/refine은 'wipe'(짧은 와이퍼) 스타일입니다.
  * - bbox: imagePaths가 1장일 때만 의미가 있고, 없으면 전체 화면(x:0,y:0,w:1,h:1)으로 간주합니다.
  *
  * 인트로 카드에는 "AI-Imagined Creation Process"라는 문구를 항상 고정으로 넣어서, 이 영상이
@@ -506,10 +612,13 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
     const finalSeg = path.join(workDir, `seg-${i}-final.mp4`);
 
     if (seg.imagePaths.length > 1) {
+      // sketch 단계는 점진적으로 확장되며 그려지는 'progressive' 스타일, underpainting/
+      // refine("색칠") 단계는 또렷하게 끊어지는 'wipe' 스타일을 씁니다.
       await buildTimelapseSegmentClip({
         imagePaths: seg.imagePaths,
         durationSec: seg.durationSec,
         outPath: rawVideo,
+        style: seg.stage === 'sketch' ? 'progressive' : 'wipe',
       });
     } else {
       const bbox = seg.bbox || { x: 0, y: 0, w: 1, h: 1 };
@@ -628,10 +737,14 @@ export async function assembleLongformBundle({ finishedImagePath, segments, pain
     const finalSeg = path.join(segmentsDir, `seg-${i}-final.mp4`);
 
     if (seg.imagePaths.length > 1) {
+      // sketch 단계는 점진적으로 확장되며 그려지는 'progressive' 스타일, underpainting/
+      // refine("색칠") 단계는 또렷하게 끊어지는 'wipe' 스타일을 씁니다(process-recreation
+      // 파이프라인과 동일한 규칙).
       await buildTimelapseSegmentClip({
         imagePaths: seg.imagePaths,
         durationSec: seg.durationSec,
         outPath: rawVideo,
+        style: seg.stage === 'sketch' ? 'progressive' : 'wipe',
       });
     } else {
       const bbox = seg.bbox || { x: 0, y: 0, w: 1, h: 1 };
