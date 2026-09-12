@@ -120,19 +120,21 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   return outPath;
 }
 
-// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 이어붙여서, 다음 진행 단계 이미지가 화면
-// 왼쪽에서 슬라이드로 들어오며 이전 이미지를 밀어내는 방식으로 "다음 레이어가 등장하는"
-// 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을 Ken Burns 줌으로 오래 보여주는 것과
-// 달리, 여기서는 이미지 개수(N)만큼을 짧고 분명한 슬라이드 전환으로 이어붙입니다.
+// 여러 장의 이미지(예: 스케치 진행 컷 3장)를 이어붙여서, 화면(구도)은 고정된 채로 다음
+// 진행 단계 이미지가 왼쪽에서부터 오른쪽으로 와이퍼처럼 쓸려 나오며 이전 이미지를 덮어
+// 나가는 "다음 레이어가 등장하는" 느낌을 만듭니다. buildSegmentClip()이 이미지 1장을
+// Ken Burns 줌으로 오래 보여주는 것과 달리, 여기서는 이미지 개수(N)만큼을 짧고 분명한
+// 와이퍼 전환으로 이어붙입니다.
 //
 // 예전에는 "붓결 순서 필드"(그레이스케일 노이즈 무늬)를 마스크로 쓴 maskedmerge 전환으로
 // 실제 붓터치를 흉내 냈지만, 실제로는 붓자국이 아니라 화면 군데군데서 색이 스며 나오는
-// "번짐" 효과처럼 보인다는 피드백을 받았습니다. 진짜 붓질처럼 보이게 다듬는 것보다,
-// 각 진행 단계를 또렷하게 오래 멈춰 보여주고 그 사이에만 짧게 넘어가는 편이 "이전 단계 ->
-// 다음 단계"를 훨씬 명확하게 전달합니다 — 그래서 대부분의 시간은 이미지를 정지 화면으로
-// 보여주고, 단계가 바뀔 때만 SLIDE_TRANSITION_SEC 길이의 빠른 슬라이드(ffmpeg xfade의
-// slideright — 다음 이미지가 왼쪽에서 들어오며 이전 이미지를 오른쪽으로 밀어냄)를 넣는
-// 방식으로 바꿨습니다.
+// "번짐" 효과처럼 보인다는 피드백을 받았습니다. 그 다음 시도로 화면 전체가 옆으로 밀려나는
+// "슬라이드" 전환(xfade의 slideright)을 넣어봤지만, 원했던 건 화면(구도)이 움직이지 않고
+// 제자리에 그대로 있는 채로 다음 레이어만 와이퍼처럼 훑고 지나가며 드러나는 효과라는 피드백을
+// 받아 다시 바꿨습니다 — 그래서 지금은 이미지 자체는 전혀 이동/평행이동하지 않고, 화면 왼쪽
+// 끝에서 시작해 오른쪽으로 진행하는 수직 경계선이 다음 이미지를 그 뒤에서부터 점점 더 많이
+// 드러내는 xfade의 wiperight 전환을 씁니다. 대부분의 시간은 이미지를 정지 화면으로 보여주고,
+// 단계가 바뀔 때만 WIPE_TRANSITION_SEC 길이만큼 짧게 와이퍼로 넘어갑니다.
 //
 // 이미지 i장 각각을 perClipDuration만큼 로드한 뒤, 연속된 두 이미지 사이를
 // transitionSec 길이의 xfade로 겹쳐 이어붙입니다. xfade는 겹치는 구간만큼 전체 길이가
@@ -141,7 +143,7 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
 //   n * perClipDuration - (n-1) * transitionSec = durationSec
 // 이미지가 1장뿐이면(예외적인 경우 대비) 전환 없이 buildSegmentClip과 동일하게 전체 화면을
 // 그대로 durationSec만큼 보여줍니다.
-const SLIDE_TRANSITION_SEC = 0.4; // 슬라이드 전환 하나의 길이(초) — 짧고 분명하게, 오래 끌지 않도록
+const WIPE_TRANSITION_SEC = 0.4; // 와이퍼 전환 하나의 길이(초) — 짧고 분명하게, 오래 끌지 않도록
 
 export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPath }) {
   const n = imagePaths.length;
@@ -161,7 +163,7 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
   const numTransitions = n - 1;
   // 세그먼트 길이가 아주 짧을 때를 대비해, 전환에 쓰는 총 시간이 durationSec의 40%를
   // 넘지 않도록 필요하면 전환 하나의 길이를 줄입니다.
-  const transitionSec = Math.min(SLIDE_TRANSITION_SEC, (durationSec * 0.4) / numTransitions);
+  const transitionSec = Math.min(WIPE_TRANSITION_SEC, (durationSec * 0.4) / numTransitions);
   const perClipDuration = (durationSec + numTransitions * transitionSec) / n;
 
   const inputArgs = [];
@@ -182,7 +184,7 @@ export async function buildTimelapseSegmentClip({ imagePaths, durationSec, outPa
     const outLabel = i === numTransitions ? 'vout' : `xf${i}`;
     cumulativeOffset += perClipDuration - transitionSec;
     filterParts.push(
-      `[${prevLabel}][img${i}]xfade=transition=slideright:duration=${transitionSec.toFixed(3)}:offset=${cumulativeOffset.toFixed(3)}[${outLabel}]`
+      `[${prevLabel}][img${i}]xfade=transition=wiperight:duration=${transitionSec.toFixed(3)}:offset=${cumulativeOffset.toFixed(3)}[${outLabel}]`
     );
     prevLabel = outLabel;
   }
@@ -450,7 +452,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
  * - imagePaths: 이 세그먼트에서 보여줄 이미지 경로 배열. 실사진 세그먼트(identify/reference/
  *   finish)는 보통 1장(원본 사진)이라 buildSegmentClip()으로 bbox Ken Burns 줌을 적용합니다.
  *   생성 이미지 세그먼트(sketch/underpainting/refine)는 여러 장(진행 컷)이라
- *   buildTimelapseSegmentClip()으로 짧은 슬라이드 전환의 타임랩스를 적용합니다.
+ *   buildTimelapseSegmentClip()으로 짧은 와이퍼 전환의 타임랩스를 적용합니다.
  * - bbox: imagePaths가 1장일 때만 의미가 있고, 없으면 전체 화면(x:0,y:0,w:1,h:1)으로 간주합니다.
  *
  * 인트로 카드에는 "AI-Imagined Creation Process"라는 문구를 항상 고정으로 넣어서, 이 영상이
