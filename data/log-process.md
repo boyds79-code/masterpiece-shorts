@@ -16,3 +16,4 @@
 | 2026-09-12 | Study for "A Sunday on La Grande Jatte" | Georges Seurat | [1Q1AuxyxXEU](https://studio.youtube.com/video/1Q1AuxyxXEU/edit) |
 | 2026-09-12 | Two Men Contemplating the Moon | Caspar David Friedrich | [WHjrdFt8Owg](https://studio.youtube.com/video/WHjrdFt8Owg/edit) |
 | 2026-09-12 | Gathering of government officials | Unidentified artist | [xOTrYKE4kDk](https://studio.youtube.com/video/xOTrYKE4kDk/edit) |
+| 2026-09-12 | A Hunting Scene | Piero di Cosimo (Piero di Lorenzo di Piero d'Antonio) | [h7WZFRq1xv4](https://studio.youtube.com/video/h7WZFRq1xv4/edit) |
