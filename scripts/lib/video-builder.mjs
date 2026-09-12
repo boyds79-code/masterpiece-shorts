@@ -257,6 +257,12 @@ const THUMBNAIL_BADGE_DEFAULT_TEXT = 'HOW IT WAS PAINTED';
  * 그림을 흐릿하게 확대한 배경으로 채웁니다 — 검은 여백 없이 그림 전체를 꽉 찬 느낌으로
  * 보여주기 위해서입니다.
  *
+ * splitImagePath가 주어지면(제작 과정 상상 재현 파이프라인에서 스케치 단계 이미지를
+ * 넘겨줍니다) 위 letterbox 방식 대신, 화면을 정확히 반으로 나눠 왼쪽엔 imagePath(완성작
+ * 원본), 오른쪽엔 splitImagePath(스케치 단계 진행 컷)를 각각 꽉 채워 보여주고 그 사이에
+ * 얇은 구분선을 긋습니다 — "원본 → 스케치"가 한눈에 대비되도록 하기 위해서입니다.
+ * splitImagePath를 안 넘기면 예전과 동일한 letterbox 방식을 씁니다.
+ *
  * title이 주어지면(제작 과정 상상 재현 파이프라인에서 영상 제목을 넘겨줍니다) 화면 위쪽에
  * 큰 글씨로 얹고, badgeText(기본값 "HOW IT WAS PAINTED")를 아래쪽에 눈에 띄는 색 배지로
  * 얹어서, 썸네일만 보고도 이 영상이 "어떻게 그려졌는지"를 보여준다는 게 바로 드러나게
@@ -264,13 +270,28 @@ const THUMBNAIL_BADGE_DEFAULT_TEXT = 'HOW IT WAS PAINTED';
  * 그림만 꽉 채운 썸네일을 만듭니다 — 그 형식은 제작 과정이 아니라 숨은 디테일을 다루므로
  * 이 문구가 맞지 않습니다.
  */
-export async function buildThumbnail({ imagePath, title, badgeText, outPath }) {
+export async function buildThumbnail({ imagePath, splitImagePath, title, badgeText, outPath }) {
   const resolvedBadgeText = badgeText !== undefined ? badgeText : (title ? THUMBNAIL_BADGE_DEFAULT_TEXT : null);
-  const filterParts = [
-    `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},boxblur=25:5,eq=brightness=-0.08[bg]`,
-    `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease[fg]`,
-    `[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[merged]`,
-  ];
+
+  const inputArgs = ['-i', imagePath];
+  let filterParts;
+
+  if (splitImagePath) {
+    inputArgs.push('-i', splitImagePath);
+    const halfWidth = WIDTH / 2;
+    filterParts = [
+      `[0:v]scale=${halfWidth}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${halfWidth}:${HEIGHT}[splitleft]`,
+      `[1:v]scale=${halfWidth}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${halfWidth}:${HEIGHT}[splitright]`,
+      `[splitleft][splitright]hstack=inputs=2[stacked]`,
+      `[stacked]drawbox=x=${halfWidth - 2}:y=0:w=4:h=${HEIGHT}:color=white@0.85:t=fill[merged]`,
+    ];
+  } else {
+    filterParts = [
+      `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},boxblur=25:5,eq=brightness=-0.08[bg]`,
+      `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease[fg]`,
+      `[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[merged]`,
+    ];
+  }
 
   let lastLabel = 'merged';
   let titleCaptionFile = null;
@@ -293,7 +314,7 @@ export async function buildThumbnail({ imagePath, title, badgeText, outPath }) {
 
   await run('ffmpeg', [
     '-y',
-    '-i', imagePath,
+    ...inputArgs,
     '-filter_complex', filterParts.join(';'),
     '-map', '[out]',
     '-frames:v', '1',
@@ -522,8 +543,22 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
   const srtPath = path.join(workDir, 'captions.srt');
   fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
 
+  // 썸네일 왼쪽 절반에 쓸 "스케치" 이미지: sketch 단계의 마지막(가장 완성도 높은) 진행
+  // 컷을 씁니다 — 첫 번째 컷은 너무 러프해서 작게 보이는 썸네일에서는 무엇인지 잘 안
+  // 보일 수 있기 때문입니다. sketch 단계를 못 찾거나 이미지가 없으면(스키마상 항상 있어야
+  // 하지만 방어적으로) 2분할 없이 기존 letterbox 썸네일로 자동 대체됩니다.
+  const sketchSegment = segments.find((seg) => seg.stage === 'sketch');
+  const sketchImagePath = sketchSegment?.imagePaths?.length
+    ? sketchSegment.imagePaths[sketchSegment.imagePaths.length - 1]
+    : null;
+
   const thumbnailPath = path.join(workDir, 'thumbnail.jpg');
-  await buildThumbnail({ imagePath: finishedImagePath, title, outPath: thumbnailPath });
+  await buildThumbnail({
+    imagePath: finishedImagePath,
+    splitImagePath: sketchImagePath,
+    title,
+    outPath: thumbnailPath,
+  });
 
   return { finalPath, srtPath, thumbnailPath };
 }
