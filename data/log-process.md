@@ -22,3 +22,4 @@
 | 2026-09-13 | By the Seashore | Auguste Renoir | [wcQnihpxK8E](https://studio.youtube.com/video/wcQnihpxK8E/edit) |
 | 2026-09-13 | The Last Communion of Saint Jerome | Botticelli (Alessandro di Mariano Filipepi) | [O5Rt1VoSBBY](https://studio.youtube.com/video/O5Rt1VoSBBY/edit) |
 | 2026-09-13 | Our Lady of Valvanera | Unknown | [cM854T9YCHM](https://studio.youtube.com/video/cM854T9YCHM/edit) |
+| 2026-09-13 | Annunciation Triptych (Merode Altarpiece) | Robert Campin | [7REstNBGyxc](https://studio.youtube.com/video/7REstNBGyxc/edit) |
