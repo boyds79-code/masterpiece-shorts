@@ -3,7 +3,7 @@
 퍼블릭 도메인(저작권 만료) 명화를 하나 골라서, Claude가 그림을 직접 보고 "숨은 의미를
 파고드는" 나레이션 대본을 쓰고, Gemini가 그 대본을 음성으로 읽고, ffmpeg이 줌/팬 효과를 입힌
 9:16 숏폼 영상으로 조립한 뒤, YouTube에 **비공개(private)** 로 업로드하는 파이프라인입니다.
-**GitHub Actions 자동 스케줄 없이, 만들고 싶을 때 수동으로 실행합니다.**
+**GitHub Actions로 하루 2회 자동 실행됩니다** (제작 과정 상상 재현 파이프라인과 합쳐 하루 총 4개 업로드 — 자세한 스케줄은 아래 "자동 실행 스케줄" 섹션 참고). 물론 Actions 탭에서 언제든 수동 실행도 가능합니다.
 
 **중요: 영상은 자동으로 "공개"되지 않습니다.** 비공개 상태로 채널에 올라가고, 당신이
 YouTube Studio에서 직접 확인한 뒤 공개로 전환해야 실제로 사람들이 볼 수 있습니다 —
@@ -11,8 +11,10 @@ YouTube Studio에서 직접 확인한 뒤 공개로 전환해야 실제로 사�
 
 ## 어떻게 작동하나요
 
-1. 로컬(`npm run generate`)이나 GitHub Actions **Actions 탭 → Run workflow**로 원할
-   때마다 수동으로 실행합니다 (자동 스케줄 없음).
+1. `.github/workflows/daily-video.yml`의 `schedule`로 **하루 2번(UTC 07:05/19:05)
+   자동으로 실행**됩니다 — 자세한 내용은 아래 "자동 실행 스케줄" 섹션 참고. 로컬
+   (`npm run generate`)이나 GitHub Actions **Actions 탭 → Run workflow**로 언제든 추가
+   수동 실행도 가능합니다.
 2. 메트로폴리탄 미술관(Met) Open Access API에서, 아직 쓰지 않은 "하이라이트(대표작)"
    회화 중 하나를 무작위로 고릅니다. `isPublicDomain: true`인 작품만 사용하고(CC0, API 키
    불필요), classification/objectName을 한 번 더 확인해서 조각·구조물 등 회화가 아닌
@@ -115,8 +117,42 @@ git push -u origin main
 
 ### 7. 첫 실행 테스트
 저장소 **Actions 탭 → Generate masterpiece short → Run workflow**를 눌러 수동으로 한 번
-실행해보세요 (자동 스케줄은 없고, 만들고 싶을 때마다 이 버튼을 누르면 됩니다). 실행이
-끝나면 로그 마지막 줄에 뜨는 YouTube Studio 링크로 들어가서 결과를 확인하세요.
+실행해보세요 (자동 스케줄과는 별개로, 원할 때 언제든 이 버튼으로 추가 실행할 수 있습니다).
+실행이 끝나면 로그 마지막 줄에 뜨는 YouTube Studio 링크로 들어가서 결과를 확인하세요.
+
+## 자동 실행 스케줄 (하루 4개)
+
+이 저장소는 매일 자동으로 영상 4개를 만들어 올립니다 — "숨은 의미" 2개 + "제작 과정 상상
+재현" 2개. 두 워크플로가 서로 다른 시간에 번갈아 돌도록 6시간 간격으로 나눠뒀습니다(cron은
+항상 UTC 기준, https://crontab.guru):
+
+| 시간 (UTC) | 워크플로 | 파이프라인 |
+| --- | --- | --- |
+| 01:05 | `process-video.yml` | 제작 과정 상상 재현 |
+| 07:05 | `daily-video.yml` | 숨은 의미 |
+| 13:05 | `process-video.yml` | 제작 과정 상상 재현 |
+| 19:05 | `daily-video.yml` | 숨은 의미 |
+
+**쿼터 한도 — 왜 하루 4개인가요**
+YouTube Data API의 기본 일일 쿼터는 **10,000 units**이고, 영상 하나를 올릴 때
+`videos.insert`(1,600) + `captions.insert`(200) + `thumbnails.set`(50, 제작 과정
+파이프라인만 해당) = 최대 약 1,850 units가 듭니다. 4회 × 1,850 = 7,400 units로 기본 쿼터
+안에 여유 있게 들어옵니다. 쿼터는 태평양 표준시 자정에 초기화됩니다. 더 자주(또는 더 많이)
+올리고 싶다면 [Google Cloud Console에서 이 프로젝트의 YouTube Data API 쿼터 증설을 먼저
+신청](https://support.google.com/youtube/contact/yt_api_form)하세요(승인에 며칠 걸릴 수
+있습니다) — 승인되면 각 워크플로 파일의 `cron` 줄에 시간을 추가하면 됩니다.
+
+각 워크플로는 예약 실행과 수동 실행이 겹쳐 같은 그림을 동시에 건드리거나 커밋이 충돌하는
+걸 막기 위해 `concurrency`로 동시 실행을 막아둡니다(같은 워크플로끼리만 — 두 워크플로는
+서로 다른 그림을 고르므로 서로는 막지 않습니다).
+
+**그림 소진 속도 참고**
+두 파이프라인이 `data/used-paintings.json`을 공유하므로, 하루 4개씩 자동으로 그림을
+소비합니다 — 수동으로 가끔 돌릴 때보다 "아직 안 쓴 하이라이트 그림" 풀이 훨씬 빨리
+줄어듭니다. `pickUnusedPainting()`이 더 이상 고를 그림이 없으면 `null`을 반환하고 그
+실행은 조용히 아무것도 안 올린 채 끝납니다 — 이 상태가 되면 `scripts/lib/met-api.mjs`의
+`DEPARTMENT_IDS`에 다른 부서(예: 미국 회화, 근대 유럽 회화 등)를 추가해서 소재 풀을
+늘려야 합니다.
 
 ## 검수 후 공개하기
 
@@ -158,8 +194,8 @@ data/used-paintings.json        모든 파이프라인이 함께 쓰는 그림 �
 data/log.md                     "숨은 의미" 영상 생성 기록 (자동 갱신)
 data/log-process.md             "제작 과정 상상 재현" 영상 생성 기록 (자동 갱신)
 data/log-longform.md            "긴 영상 + 티저 쇼츠 2개" 생성 기록 (자동 갱신)
-.github/workflows/daily-video.yml   수동(workflow_dispatch)으로만 실행되는 "숨은 의미" 단독 워크플로
-.github/workflows/process-video.yml 수동(workflow_dispatch)으로만 실행되는 "제작 과정 상상 재현" 단독 워크플로
+.github/workflows/daily-video.yml   하루 2회 자동 실행(+ 수동 실행 가능)되는 "숨은 의미" 단독 워크플로
+.github/workflows/process-video.yml 하루 2회 자동 실행(+ 수동 실행 가능)되는 "제작 과정 상상 재현" 단독 워크플로
 .github/workflows/longform-video.yml 수동(workflow_dispatch)으로만 실행 — 긴 영상 1개 + 티저 쇼츠 2개를 함께 생성
 ```
 
@@ -241,34 +277,19 @@ data/log-longform.md            "긴 영상 + 티저 쇼츠 2개" 생성 기록 
 - (추가로) Claude에게 나레이션 자체도 단정적 서술이 아니라 "~였을 것이다" 같은 추정
   어조로 쓰도록 지시하지만, 위 4가지는 대본 내용과 무관하게 항상 강제로 적용됩니다.
 
-**자동 실행 — 하루 5회**
-이 파이프라인은 `.github/workflows/process-video.yml`의 `schedule`로 **하루 5번(4시간
-간격, UTC 01:05/05:05/09:05/13:05/17:05) 자동으로 실행**됩니다. 블로그 프로젝트들의
-"매일 초안 자동 생성"과 같은 철학이지만, 개수는 8이 아니라 5입니다 — 이유는 아래
-"쿼터 한도" 참고. 언제든 저장소 **Actions 탭 → Generate masterpiece process-recreation
-short → Run workflow**로 추가 수동 실행도 가능합니다 (예약 실행과 겹치지 않도록
-`concurrency`로 동시 실행은 막아둡니다).
+**자동 실행 — 하루 2회**
+이 파이프라인은 `.github/workflows/process-video.yml`의 `schedule`로 **하루 2번(UTC
+01:05/13:05) 자동으로 실행**됩니다 — "숨은 의미" 파이프라인(`daily-video.yml`)도 하루 2번
+자동 실행되도록 함께 설정되어 있어서, 두 파이프라인을 합쳐 하루 총 4개가 업로드됩니다.
+전체 스케줄 표와 쿼터 계산은 위쪽 "자동 실행 스케줄 (하루 4개)" 섹션을 참고하세요. 언제든
+저장소 **Actions 탭 → Generate masterpiece process-recreation short → Run workflow**로
+추가 수동 실행도 가능합니다 (예약 실행과 겹치지 않도록 `concurrency`로 동시 실행은
+막아둡니다).
 
 로컬에서 한 번만 돌리고 싶다면:
 ```bash
 npm run generate:process
 ```
-
-**쿼터 한도 — 왜 8개가 아니라 5개인가요**
-YouTube Data API의 기본 일일 쿼터는 **10,000 units**이고, 영상 하나를 올릴 때
-`videos.insert`(1,600) + `captions.insert`(200) + `thumbnails.set`(50) = **약 1,850
-units**가 듭니다. 5회 × 1,850 = 9,250 units로 기본 쿼터 안에 안전하게 들어오지만, 6회부터는
-(11,100 units) 초과할 위험이 있습니다. 쿼터는 태평양 표준시 자정에 초기화됩니다. 하루 8개
-이상 원한다면 [Google Cloud Console에서 이 프로젝트의 YouTube Data API 쿼터 증설을 먼저
-신청](https://support.google.com/youtube/contact/yt_api_form)하세요 (검토에 며칠 걸릴 수
-있습니다) — 승인되면 위 워크플로 파일의 `cron` 줄을 늘리기만 하면 됩니다.
-
-**그림 소진 속도 참고**
-하루 5개씩 자동으로 그림을 소비하므로, 수동으로 가끔 돌릴 때보다 "아직 안 쓴 하이라이트
-그림" 풀이 훨씬 빨리 줄어듭니다. `pickUnusedPainting()`이 더 이상 고를 그림이 없으면
-`null`을 반환하고 그 실행은 조용히 아무것도 안 올린 채 끝납니다 — 이 상태가 되면
-`scripts/lib/met-api.mjs`의 `DEPARTMENT_IDS`에 다른 부서(예: 미국 회화, 근대 유럽 회화 등)를
-추가해서 소재 풀을 늘려야 합니다.
 
 **참고**
 - `GEMINI_IMAGE_MODEL`은 비교적 최근에 나온 Gemini 이미지 생성 API를 씁니다 — 처음

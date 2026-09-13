@@ -1,11 +1,27 @@
 name: Generate masterpiece short
 
-# 자동 스케줄 없이, Actions 탭에서 "Run workflow"를 눌러 원할 때만 수동으로 실행합니다.
+# 하루 2회 자동 실행 + 언제든 Actions 탭에서 "Run workflow"로 수동 실행도 가능합니다.
+# process-video.yml(제작 과정 상상 재현, UTC 01:05/13:05)과 6시간씩 어긋나게 UTC
+# 07:05/19:05로 잡아서, 두 워크플로를 합쳐 하루 총 4개 업로드(숨은 의미 2개 + 제작 과정
+# 2개)가 6시간 간격으로 고르게 퍼지도록 했습니다 — 쿼터 계산 등 자세한 설명은
+# process-video.yml의 주석과 README.md의 "자동 실행 스케줄" 섹션을 참고하세요.
+#
+# cron은 항상 UTC 기준입니다(https://crontab.guru) — 시간을 바꾸려면 아래 cron 값들을
+# 수정하세요.
 on:
+  schedule:
+    - cron: '5 7 * * *'
+    - cron: '5 19 * * *'
   workflow_dispatch: {}
 
 permissions:
   contents: write
+
+# 예정된 실행과 수동 실행이 겹쳐서 같은 그림을 동시에 건드리거나 커밋이 충돌하는 걸
+# 막기 위해 동시 실행을 막습니다(process-video.yml과 동일한 패턴).
+concurrency:
+  group: daily-video
+  cancel-in-progress: false
 
 jobs:
   generate-and-upload:
