@@ -20,3 +20,4 @@
 | 2026-09-12 | Christ Carrying the Cross | El Greco (Domenikos Theotokopoulos) | [V05O_oo-hwQ](https://studio.youtube.com/video/V05O_oo-hwQ/edit) |
 | 2026-09-12 | Madame Georges Charpentier (Marguerite-Louise Lemonnier, 1848–1904) and Her Children, Georgette-Berthe (1872–1945) and Paul-Emile-Charles (1875–1895) | Auguste Renoir | [Dx_VKwNXjhg](https://studio.youtube.com/video/Dx_VKwNXjhg/edit) |
 | 2026-09-13 | By the Seashore | Auguste Renoir | [wcQnihpxK8E](https://studio.youtube.com/video/wcQnihpxK8E/edit) |
+| 2026-09-13 | The Last Communion of Saint Jerome | Botticelli (Alessandro di Mariano Filipepi) | [O5Rt1VoSBBY](https://studio.youtube.com/video/O5Rt1VoSBBY/edit) |
