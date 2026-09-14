@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { isNearFullImageBbox } from './anthropic.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -87,6 +88,18 @@ function escapeDrawtextPath(p) {
  * 보인다는 피드백에 따라 영상에는 자막을 굽지 않습니다. 대신 buildSrt()로 만든
  * SRT 파일을 YouTube 자막(CC) 트랙으로 별도 업로드합니다 — youtube-upload.mjs의
  * uploadCaptions() 참고. 시청자가 CC를 켜면 유튜브 플레이어 자체 폰트로 보입니다.
+ *
+ * bbox가 전체 그림에 가깝고(IDENTIFY/CONTEXT/CLOSE 등, isNearFullImageBbox() 참고)
+ * 그 영역 자체가 화면 비율(9:16)보다 가로로 넓은 경우는 특별 취급합니다. 기본 방식
+ * (세로 기준으로 채운 뒤 가운데만 남기고 좌우를 잘라내는 "cover" 크롭)을 그대로 쓰면,
+ * 가로로 넓은 그림(예: 마네 "뱃놀이(Boating)")은 "전체 그림"을 보여줘야 할 이 순간에도
+ * 좌우 끝부분이 항상 화면 밖으로 잘려나가서, 정작 전체 구도가 한 번도 온전히 나타나지
+ * 않는 문제가 있었습니다. 이 경우엔 buildThumbnail()의 letterbox 방식과 동일하게, 그림을
+ * 잘라내지 않고 전체를 축소해서 중앙에 배치하고, 남는 위/아래 여백은 같은 그림을
+ * 확대·블러 처리한 배경으로 채웁니다 — 그림의 어느 쪽도 잘리지 않고 전체 구도가 한 번은
+ * 온전히 화면에 나타나게 하기 위해서입니다. 디테일을 확대하는 일반 세그먼트(bbox가
+ * 전체 그림이 아닌 경우)는 이미 특정 영역을 꽉 채워 보여주는 게 목적이므로 이 특별
+ * 취급 대상이 아니고, 기존 cover 크롭 방식을 그대로 씁니다.
  */
 export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, durationSec, outPath }) {
   const cw = Math.max(2, Math.round(bbox.w * imgWidth));
@@ -97,14 +110,30 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
   const frames = Math.max(1, Math.round(durationSec * FPS));
   const zoomIncrease = 0.1; // 클립 전체에 걸쳐 10% 확대
   const zoomStep = zoomIncrease / frames;
+  const zoomExpr = `min(zoom+${zoomStep.toFixed(6)},${(1 + zoomIncrease).toFixed(3)})`;
 
-  const vf = [
-    `crop=${cw}:${ch}:${cx}:${cy}`,
-    `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase`,
-    `crop=${WIDTH}:${HEIGHT}`,
-    `zoompan=z='min(zoom+${zoomStep.toFixed(6)},${(1 + zoomIncrease).toFixed(3)})':d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
-    'format=yuv420p',
-  ].join(',');
+  const isWholeImage = isNearFullImageBbox(bbox);
+  const isLandscapeCrop = cw / ch > WIDTH / HEIGHT;
+
+  let filterComplex;
+  if (isWholeImage && isLandscapeCrop) {
+    filterComplex = [
+      `[0:v]crop=${cw}:${ch}:${cx}:${cy},split=2[bgsrc][fgsrc]`,
+      `[bgsrc]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},boxblur=25:5,eq=brightness=-0.08[bg]`,
+      `[fgsrc]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease[fg]`,
+      `[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[merged]`,
+      `[merged]zoompan=z='${zoomExpr}':d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[zoomed]`,
+      `[zoomed]format=yuv420p[out]`,
+    ].join(';');
+  } else {
+    filterComplex = [
+      `[0:v]crop=${cw}:${ch}:${cx}:${cy}`,
+      `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase`,
+      `crop=${WIDTH}:${HEIGHT}`,
+      `zoompan=z='${zoomExpr}':d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
+      `format=yuv420p[out]`,
+    ].join(',');
+  }
 
   await run('ffmpeg', [
     '-y',
@@ -112,7 +141,8 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
     '-i', imagePath,
     '-t', String(durationSec),
     '-r', String(FPS),
-    '-vf', vf,
+    '-filter_complex', filterComplex,
+    '-map', '[out]',
     '-an',
     outPath,
   ]);
