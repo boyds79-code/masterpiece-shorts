@@ -25,3 +25,4 @@
 | 2026-09-13 | Annunciation Triptych (Merode Altarpiece) | Robert Campin | [7REstNBGyxc](https://studio.youtube.com/video/7REstNBGyxc/edit) |
 | 2026-09-13 | George Washington | Gilbert Stuart | [m_TY2DQG9nU](https://studio.youtube.com/video/m_TY2DQG9nU/edit) |
 | 2026-09-13 | The Card Players | Paul Cézanne | [p8Md7WyQRk0](https://studio.youtube.com/video/p8Md7WyQRk0/edit) |
+| 2026-09-14 | Wang Xizhi watching geese | Qian Xuan | [6s3NfUrt8Dc](https://studio.youtube.com/video/6s3NfUrt8Dc/edit) |
