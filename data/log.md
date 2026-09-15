@@ -35,4 +35,5 @@
 | 2026-09-13 | Boating | Edouard Manet | [JfXVoIJ1jHs](https://studio.youtube.com/video/JfXVoIJ1jHs/edit) |
 | 2026-09-14 | Young Lady in 1866 | Edouard Manet | [KheDlmOR4Lk](https://studio.youtube.com/video/KheDlmOR4Lk/edit) |
 | 2026-09-15 | The Shepherd's Song | Pierre Puvis de Chavannes | [qBxqtwt49xg](https://studio.youtube.com/video/qBxqtwt49xg/edit) |
+| 2026-09-15 | Madonna and Child | Giovanni Bellini | [MGtvSvPKoQQ](https://studio.youtube.com/video/MGtvSvPKoQQ/edit) |
 | 2026-09-15 | Joseph-Antoine Moltedo (born 1775) | Jean Auguste Dominique Ingres | [pZnSwCW-P0Y](https://studio.youtube.com/video/pZnSwCW-P0Y/edit) |

@@ -424,6 +424,13 @@
     "reason": "Claude가 segments를 비워서 반환했습니다."
   },
   {
+    "objectID": 435641,
+    "title": "Madonna and Child",
+    "artistDisplayName": "Giovanni Bellini",
+    "usedAt": "2026-09-15T19:55:35.422Z",
+    "videoIdMeaning": "MGtvSvPKoQQ"
+  },
+  {
     "objectID": 438818,
     "title": "Joseph-Antoine Moltedo (born 1775)",
     "artistDisplayName": "Jean Auguste Dominique Ingres",
