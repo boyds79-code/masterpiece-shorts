@@ -34,3 +34,4 @@
 | 2026-09-10 | The Holy Family with the Young Saint John the Baptist | Andrea del Sarto (Andrea d'Agnolo) | [RdjotxdaK0M](https://studio.youtube.com/video/RdjotxdaK0M/edit) |
 | 2026-09-13 | Boating | Edouard Manet | [JfXVoIJ1jHs](https://studio.youtube.com/video/JfXVoIJ1jHs/edit) |
 | 2026-09-14 | Young Lady in 1866 | Edouard Manet | [KheDlmOR4Lk](https://studio.youtube.com/video/KheDlmOR4Lk/edit) |
+| 2026-09-15 | The Shepherd's Song | Pierre Puvis de Chavannes | [qBxqtwt49xg](https://studio.youtube.com/video/qBxqtwt49xg/edit) |
