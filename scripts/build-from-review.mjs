@@ -39,12 +39,49 @@ export async function runBuildFromReviewDir(reviewDir) {
   }
 
   console.log(`[build-from-review] "${painting.title}" — ${painting.artistDisplayName} (${script.segments.length}개 세그먼트) 빌드를 시작합니다.`);
-  console.log('[build-from-review] 나레이션 생성 -> 영상 조립 -> YouTube 업로드까지 몇 분 걸릴 수 있어요.');
 
-  // buildAndUploadHiddenMeaningVideo는 끝나면(성공/실패 무관) workDir을 통째로 지웁니다 —
-  // 리뷰 폴더를 그대로 workDir로 넘기면 원본 이미지/대본까지 함께 정리되어,
-  // generateOneVideo()가 output/run-*/을 정리하는 것과 동일하게 산출물이 남지 않습니다.
-  const { uploadResult } = await buildAndUploadHiddenMeaningVideo({ painting, script, imagePath, workDir: resolvedDir });
+  // 이전 시도가 실패했더라도(예: YouTube 인증 오류) keepOnFailure 덕에 영상 자체는 남아있을
+  // 수 있습니다. 그 영상이 "지금 script.json과 정확히 같은 내용"으로 만들어진 것이면
+  // 나레이션/영상조립을 또 돌리지 않고 업로드부터 재시도합니다 — 실제로 비용이 드는 Gemini
+  // TTS/Anthropic 호출을 인증 오류 때문에 또 낭비하지 않기 위해서입니다. bbox를 고쳐서
+  // script.json 내용이 달라졌다면 오래된 영상을 재사용하면 안 되므로 처음부터 다시 만듭니다.
+  //
+  // mtime이 아니라 내용을 비교합니다: 리뷰 화면의 "실행하기" 버튼은 매번 먼저 /save를
+  // 호출해서 실제 내용이 바뀌지 않았어도 script.json의 mtime을 새로 갱신하기 때문에, mtime
+  // 비교로는 브라우저 버튼 흐름에서 재사용이 항상 무효화되어 버립니다.
+  const assemblyDir = path.join(resolvedDir, 'assembly');
+  const finalVideoPath = path.join(assemblyDir, 'final.mp4');
+  const srtPath = path.join(assemblyDir, 'captions.srt');
+  const thumbnailPath = path.join(assemblyDir, 'thumbnail.jpg');
+  const scriptSnapshotPath = path.join(assemblyDir, 'script-snapshot.json');
+
+  let resumeFrom = null;
+  if ([finalVideoPath, srtPath, thumbnailPath, scriptSnapshotPath].every((p) => fs.existsSync(p))) {
+    const previousSnapshot = fs.readFileSync(scriptSnapshotPath, 'utf8');
+    const currentSnapshot = JSON.stringify(script);
+    if (previousSnapshot === currentSnapshot) {
+      resumeFrom = { finalVideoPath, srtPath, thumbnailPath };
+      console.log('[build-from-review] 이전 시도에서 만든 영상이 지금 script.json과 내용이 같아 재사용합니다 — 업로드부터 재시도합니다.');
+    } else {
+      console.log('[build-from-review] script.json 내용이 그 사이에 바뀌어 있어, 이전 영상은 재사용하지 않고 처음부터 다시 만듭니다.');
+    }
+  }
+  if (!resumeFrom) {
+    console.log('[build-from-review] 나레이션 생성 -> 영상 조립 -> YouTube 업로드까지 몇 분 걸릴 수 있어요.');
+  }
+
+  // buildAndUploadHiddenMeaningVideo는 성공하면 workDir을 통째로 지웁니다(리뷰 폴더를 그대로
+  // workDir로 넘기므로 원본 이미지/대본까지 함께 정리되어, generateOneVideo()가
+  // output/run-*/을 정리하는 것과 동일하게 산출물이 남지 않습니다). keepOnFailure: true라서
+  // 실패하면 대신 폴더를 남겨서 위 재사용 로직으로 다시 시도할 수 있게 합니다.
+  const { uploadResult } = await buildAndUploadHiddenMeaningVideo({
+    painting,
+    script,
+    imagePath,
+    workDir: resolvedDir,
+    keepOnFailure: true,
+    resumeFrom,
+  });
 
   const usedList = loadUsed();
   upsertUsed(usedList, {

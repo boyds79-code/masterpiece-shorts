@@ -216,42 +216,71 @@ export async function generateOneVideo() {
  * 오케스트레이터(build-from-review.mjs 등)도 이미 만든 painting/script/imagePath만 넘겨서
  * 재사용할 수 있습니다.
  *
- * workDir은 호출자가 만들어서 넘겨야 하고, 성공/실패와 무관하게 이 함수가 끝나면서
- * (finally) 삭제합니다 — 호출자는 그 안의 파일을 이 함수 호출 이후에 쓰면 안 됩니다.
+ * workDir은 호출자가 만들어서 넘겨야 합니다. 기본적으로는 성공/실패와 무관하게 이 함수가
+ * 끝나면서(finally) 삭제합니다 — 호출자는 그 안의 파일을 이 함수 호출 이후에 쓰면 안 됩니다.
  *
+ * @param {object} params
+ * @param {boolean} [params.keepOnFailure] - true면 실패했을 때 workDir을 지우지 않고
+ *   남겨둡니다(성공하면 평소처럼 지웁니다). 자동 파이프라인(generateOneVideo/배치)은 이
+ *   옵션을 안 쓰는 게 맞습니다 — 재시도 UI가 없는 1회성 실행이라 실패한 산출물이 계속
+ *   쌓이기만 하기 때문입니다. build-from-review.mjs처럼 사람이 다시 시도할 수 있는
+ *   흐름에서만 true로 씁니다.
+ * @param {{ finalVideoPath: string, srtPath: string, thumbnailPath: string }} [params.resumeFrom] -
+ *   이전 시도(keepOnFailure로 남겨진)에서 이미 만들어둔 영상/자막/썸네일 경로. 주어지면
+ *   나레이션 생성과 ffmpeg 조립을 건너뛰고 바로 업로드부터 재시도합니다 — 업로드 인증
+ *   오류처럼 영상 자체는 멀쩡한데 마지막 단계만 실패했을 때 유료 API(Gemini TTS,
+ *   Anthropic) 호출을 다시 낭비하지 않기 위한 용도입니다. 호출자가 이 경로들의 파일이
+ *   실제로 존재하고 최신 script.json 기준으로 여전히 유효한지 미리 확인해야 합니다.
  * @returns {Promise<{ uploadResult: object }>}
  */
-export async function buildAndUploadHiddenMeaningVideo({ painting, script, imagePath, workDir }) {
-  // 여기서부터 업로드 완료까지 중간 어디서든 실패하면(TTS 서버 오류, ffmpeg 실패, 업로드
-  // 인증 오류 등) workDir(원본 이미지/오디오/조립 중간 파일)을 지우지 않고 남겨두면 배치로
-  // 여러 개 돌릴 때 실패한 시도마다 output/ 폴더에 찌꺼기가 계속 쌓입니다. try/finally로
-  // 성공/실패 상관없이 workDir을 정리합니다 (실패 시에도 에러는 그대로 위로 던집니다).
+export async function buildAndUploadHiddenMeaningVideo({ painting, script, imagePath, workDir, keepOnFailure = false, resumeFrom = null }) {
   let uploadResult;
+  let succeeded = false;
   try {
-    console.log('[generate-video] 각 세그먼트 나레이션 오디오 생성 중 (Gemini TTS)...');
-    for (let i = 0; i < script.segments.length; i++) {
-      const seg = script.segments[i];
-      const audioPath = path.join(workDir, `seg-${i}-audio.wav`);
-      const { durationSec } = await generateNarrationAudio({
-        text: seg.narration,
-        apiKey: process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_TTS_MODEL,
-        voice: process.env.GEMINI_TTS_VOICE,
-        outPath: audioPath,
-      });
-      seg.audioPath = audioPath;
-      seg.durationSec = durationSec;
-      console.log(`[generate-video]   세그먼트 ${i + 1}/${script.segments.length} 오디오 완료 (${durationSec.toFixed(1)}초)`);
-    }
+    let finalVideoPath, srtPath, thumbnailPath;
 
-    console.log('[generate-video] ffmpeg로 영상 조립 중 (줌/팬, 자막은 굽지 않고 SRT로 별도 생성, 썸네일 생성)...');
-    const { finalPath: finalVideoPath, srtPath, thumbnailPath } = await assembleVideo({
-      imagePath,
-      segments: script.segments,
-      painting,
-      workDir: path.join(workDir, 'assembly'),
-    });
-    console.log(`[generate-video] 영상 완성: ${finalVideoPath}`);
+    if (resumeFrom) {
+      ({ finalVideoPath, srtPath, thumbnailPath } = resumeFrom);
+      console.log('[generate-video] 이전 시도에서 이미 만들어둔 영상이 있어 나레이션 생성/영상 조립을 건너뛰고 업로드부터 다시 시도합니다.');
+    } else {
+      // TTS 루프가 segments 배열을 (audioPath/durationSec 추가로) 변형하기 전에, 지금
+      // script.json 내용을 스냅샷으로 남겨둡니다. build-from-review.mjs가 다음 재시도 때
+      // "이 영상이 지금 script.json과 같은 내용으로 만들어진 게 맞는지"를 mtime이 아니라
+      // 내용으로 정확히 판단할 수 있게 하기 위해서입니다 (리뷰 화면의 "실행하기" 버튼은 매번
+      // 먼저 /save를 호출해 script.json의 mtime을 새로 갱신하므로, mtime 비교는 신뢰할 수
+      // 없습니다).
+      const scriptSnapshot = JSON.stringify(script);
+
+      console.log('[generate-video] 각 세그먼트 나레이션 오디오 생성 중 (Gemini TTS)...');
+      for (let i = 0; i < script.segments.length; i++) {
+        const seg = script.segments[i];
+        const audioPath = path.join(workDir, `seg-${i}-audio.wav`);
+        const { durationSec } = await generateNarrationAudio({
+          text: seg.narration,
+          apiKey: process.env.GEMINI_API_KEY,
+          model: process.env.GEMINI_TTS_MODEL,
+          voice: process.env.GEMINI_TTS_VOICE,
+          outPath: audioPath,
+        });
+        seg.audioPath = audioPath;
+        seg.durationSec = durationSec;
+        console.log(`[generate-video]   세그먼트 ${i + 1}/${script.segments.length} 오디오 완료 (${durationSec.toFixed(1)}초)`);
+      }
+
+      console.log('[generate-video] ffmpeg로 영상 조립 중 (줌/팬, 자막은 굽지 않고 SRT로 별도 생성, 썸네일 생성)...');
+      ({ finalPath: finalVideoPath, srtPath, thumbnailPath } = await assembleVideo({
+        imagePath,
+        segments: script.segments,
+        painting,
+        workDir: path.join(workDir, 'assembly'),
+      }));
+      console.log(`[generate-video] 영상 완성: ${finalVideoPath}`);
+
+      // 이 영상이 만들어질 때 실제로 쓰인 script.json 내용을 함께 저장 — 다음 재시도 때
+      // build-from-review.mjs가 지금 script.json과 바이트 단위로 비교해서 재사용 가능
+      // 여부를 판단합니다.
+      fs.writeFileSync(path.join(workDir, 'assembly', 'script-snapshot.json'), scriptSnapshot);
+    }
 
     const privacyStatus = process.env.YOUTUBE_PRIVACY_STATUS || 'private';
     console.log(`[generate-video] YouTube에 "${privacyStatus}" 상태로 업로드 중...`);
@@ -299,11 +328,18 @@ export async function buildAndUploadHiddenMeaningVideo({ painting, script, image
       // 수동으로 썸네일을 올릴 수 있습니다 (output/ 폴더가 이미 정리된 뒤라면 다시 생성해야 함).
       console.warn(`[generate-video] 썸네일 업로드 실패 (영상은 정상 업로드됨): ${err.message}`);
     }
+    succeeded = true;
   } finally {
-    // 업로드까지 끝났든(성공) 중간에 실패했든, 로컬 임시 산출물(원본 이미지, 오디오,
-    // 중간 영상들)은 여기서 정리합니다. 저장소에는 data/used-paintings.json과
-    // data/log.md만 남습니다.
-    fs.rmSync(workDir, { recursive: true, force: true });
+    // 성공했으면 로컬 임시 산출물(원본 이미지, 오디오, 중간 영상들)을 정리합니다 —
+    // 저장소에는 data/used-paintings.json과 data/log.md만 남습니다. 실패했을 때는
+    // keepOnFailure가 아닌 한(자동 파이프라인) 마찬가지로 정리하지만, keepOnFailure가
+    // true인데 실패한 경우(리뷰 흐름)에는 지우지 않고 남겨서 다음 실행 때 resumeFrom으로
+    // 재사용할 수 있게 합니다.
+    if (succeeded || !keepOnFailure) {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    } else {
+      console.log(`[generate-video] 실패했지만 만들어둔 영상/자막/썸네일은 남겨뒀습니다: ${workDir} — 같은 명령으로 다시 실행하면 나레이션/영상조립을 건너뛰고 업로드부터 재시도합니다.`);
+    }
   }
 
   return { uploadResult };
