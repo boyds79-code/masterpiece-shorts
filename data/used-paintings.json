@@ -414,5 +414,20 @@
     "artistDisplayName": "Wang Hui",
     "usedAt": "2026-09-15T17:46:39.475Z",
     "videoIdProcess": "So1GUN2MbHk"
+  },
+  {
+    "objectID": 78193,
+    "title": "Mandala of Raktayamari",
+    "artistDisplayName": "Mikyo Dorje",
+    "skippedAt": "2026-09-15T22:07:22.627Z",
+    "skipped": true,
+    "reason": "Claude가 segments를 비워서 반환했습니다."
+  },
+  {
+    "objectID": 438818,
+    "title": "Joseph-Antoine Moltedo (born 1775)",
+    "artistDisplayName": "Jean Auguste Dominique Ingres",
+    "usedAt": "2026-09-15T22:14:56.547Z",
+    "videoIdMeaning": "pZnSwCW-P0Y"
   }
 ]
