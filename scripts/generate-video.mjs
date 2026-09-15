@@ -8,28 +8,11 @@ import { generateVideoScript, evaluatePaintingSuitability } from './lib/anthropi
 import { generateNarrationAudio } from './lib/gemini-tts.mjs';
 import { assembleVideo } from './lib/video-builder.mjs';
 import { uploadVideo, uploadCaptions, uploadThumbnail } from './lib/youtube-upload.mjs';
+import { loadUsed, saveUsed, appendLog } from './lib/used-log.mjs';
 
 const execFileAsync = promisify(execFile);
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const USED_PATH = path.join(ROOT, 'data', 'used-paintings.json');
-const LOG_PATH = path.join(ROOT, 'data', 'log.md');
-
-function loadUsed() {
-  if (!fs.existsSync(USED_PATH)) return [];
-  return JSON.parse(fs.readFileSync(USED_PATH, 'utf8'));
-}
-
-function saveUsed(list) {
-  fs.mkdirSync(path.dirname(USED_PATH), { recursive: true });
-  fs.writeFileSync(USED_PATH, JSON.stringify(list, null, 2) + '\n');
-}
-
-function appendLog({ painting, youtube, uploadResult }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const row = `| ${today} | ${painting.title} | ${painting.artistDisplayName} | [${uploadResult.videoId}](${uploadResult.studioUrl}) |\n`;
-  fs.appendFileSync(LOG_PATH, row);
-}
 
 // Claude에게 보여줄 이미지가 너무 크면(Met 원본은 수천 픽셀) API 제한/비용에 안 좋으니
 // 긴 변 기준 1568px로 줄인 사본을 별도로 만듭니다. 영상 제작에는 원본 그대로 씁니다.
@@ -51,18 +34,17 @@ async function makeVisionCopy(originalPath, outPath) {
 const MAX_PAINTING_ATTEMPTS = 6;
 
 /**
- * 영상 하나(그림 선정 -> 대본 -> 나레이션 -> 영상 조립 -> YouTube 업로드)를 처음부터 끝까지
- * 만듭니다. generate-batch.mjs가 이 함수를 여러 번 반복 호출해서 한 번에 여러 개를 만들 때도
- * 쓰고, 이 파일을 직접 실행(`npm run generate`)할 때도 씁니다.
+ * 아직 안 쓴 그림을 하나 골라서 Claude에게 보여주고 "숨은 의미" 대본(세그먼트별 bbox 포함)을
+ * 받아옵니다. 소재가 단조롭거나 민감해서 거절되는 그림은 건너뛰고 다음 후보로 재시도합니다.
+ * generateOneVideo()가 곧바로 영상까지 만들 때 쓰고, generate-review.mjs는 여기서 멈춰서
+ * 대본/bbox를 사람이 검토할 수 있게 파일로 저장하는 데 씁니다.
  *
- * @returns {Promise<{ painting: object, script: object, uploadResult: object } | null>}
- *   성공하면 결과 정보를 반환하고, 시도 가능한 그림을 다 소진해서 더 만들 게 없으면 null을 반환합니다.
+ * @param {object} params
+ * @param {string} params.workDir - 원본 이미지 등을 저장할 폴더 (호출자가 미리 만들어둬야 함)
+ * @returns {Promise<{ painting: object, script: object, imagePath: string }>}
+ *   MAX_PAINTING_ATTEMPTS번 다 실패하면 CONTENT_REFUSAL 코드의 에러를 던집니다.
  */
-export async function generateOneVideo() {
-  // 같은 프로세스 안에서 여러 번 호출될 수 있으므로(배치 실행) 매번 새 작업 폴더를 만듭니다.
-  const workDir = path.join(ROOT, 'output', `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
-  fs.mkdirSync(workDir, { recursive: true });
-
+export async function selectPaintingAndScript({ workDir }) {
   const usedList = loadUsed();
   let painting = null;
   let script = null;
@@ -75,7 +57,6 @@ export async function generateOneVideo() {
 
     if (!candidate) {
       console.log('[generate-video] 하이라이트로 지정된 유럽 회화 작품을 모두 소진했습니다. 새 department를 추가해야 합니다 (scripts/lib/met-api.mjs의 DEPARTMENT_IDS 참고).');
-      fs.rmSync(workDir, { recursive: true, force: true });
       return null;
     }
 
@@ -143,7 +124,6 @@ export async function generateOneVideo() {
         console.error(`[generate-video] "${candidate.title}" 대본 생성 중 그림과 무관한 오류 발생 — 이 그림은 블랙리스트에 넣지 않고 바로 중단합니다: ${err.message}`);
         fs.rmSync(imagePath, { force: true });
         fs.rmSync(visionPath, { force: true });
-        fs.rmSync(workDir, { recursive: true, force: true });
         throw err;
       }
       console.warn(`[generate-video] "${candidate.title}" 대본 생성 실패(민감한 소재로 추정), 다른 그림으로 넘어갑니다: ${err.message}`);
@@ -168,10 +148,47 @@ export async function generateOneVideo() {
     );
   }
 
+  fs.rmSync(visionPath, { force: true }); // 대본 생성에만 쓰는 축소 사본, 더 이상 필요 없음
   console.log(`[generate-video] 대본 완성 — 세그먼트 ${script.segments.length}개, 제목: "${script.youtube.title}"`);
 
+  return { painting, script, imagePath };
+}
+
+/**
+ * 영상 하나(그림 선정 -> 대본 -> 나레이션 -> 영상 조립 -> YouTube 업로드)를 처음부터 끝까지
+ * 만듭니다. generate-batch.mjs가 이 함수를 여러 번 반복 호출해서 한 번에 여러 개를 만들 때도
+ * 쓰고, 이 파일을 직접 실행(`npm run generate`)할 때도 씁니다.
+ *
+ * 확대 위치를 미리 검토하고 싶다면 이 함수 대신 `npm run generate:review` ->
+ * (필요시 editor.html에서 수정) -> `npm run build:review`를 쓰세요. 그 흐름은 이 함수의
+ * 앞부분(selectPaintingAndScript)과 뒷부분(buildAndUploadHiddenMeaningVideo)을 사람이 검토하는
+ * 단계로 나눠 놓은 것입니다.
+ *
+ * @returns {Promise<{ painting: object, script: object, uploadResult: object } | null>}
+ *   성공하면 결과 정보를 반환하고, 시도 가능한 그림을 다 소진해서 더 만들 게 없으면 null을 반환합니다.
+ */
+export async function generateOneVideo() {
+  // 같은 프로세스 안에서 여러 번 호출될 수 있으므로(배치 실행) 매번 새 작업 폴더를 만듭니다.
+  const workDir = path.join(ROOT, 'output', `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  fs.mkdirSync(workDir, { recursive: true });
+
+  let selection;
+  try {
+    selection = await selectPaintingAndScript({ workDir });
+  } catch (err) {
+    fs.rmSync(workDir, { recursive: true, force: true });
+    throw err;
+  }
+
+  if (!selection) {
+    fs.rmSync(workDir, { recursive: true, force: true });
+    return null;
+  }
+
+  const { painting, script, imagePath } = selection;
   const { uploadResult } = await buildAndUploadHiddenMeaningVideo({ painting, script, imagePath, workDir });
 
+  const usedList = loadUsed();
   usedList.push({
     objectID: painting.objectID,
     title: painting.title,
@@ -180,7 +197,7 @@ export async function generateOneVideo() {
     videoIdMeaning: uploadResult.videoId,
   });
   saveUsed(usedList);
-  appendLog({ painting, youtube: script.youtube, uploadResult });
+  appendLog({ painting, uploadResult });
 
   if (process.env.GITHUB_ENV) {
     fs.appendFileSync(
@@ -196,7 +213,8 @@ export async function generateOneVideo() {
  * "숨은 의미" 대본(script) + 이미 선정된 그림/이미지로부터 나레이션 오디오 생성 -> 영상 조립
  * -> YouTube 업로드(영상/자막/썸네일)까지 처리합니다. generateOneVideo()가 내부적으로 이
  * 함수를 쓰며, 그림 선정/대본 생성 로직과 분리해 둔 덕에 그림 선정을 직접 하는 다른
- * 오케스트레이터도 이미 만든 painting/script/imagePath만 넘겨서 재사용할 수 있습니다.
+ * 오케스트레이터(build-from-review.mjs 등)도 이미 만든 painting/script/imagePath만 넘겨서
+ * 재사용할 수 있습니다.
  *
  * workDir은 호출자가 만들어서 넘겨야 하고, 성공/실패와 무관하게 이 함수가 끝나면서
  * (finally) 삭제합니다 — 호출자는 그 안의 파일을 이 함수 호출 이후에 쓰면 안 됩니다.

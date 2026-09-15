@@ -158,6 +158,44 @@ YouTube Data API의 기본 일일 쿼터는 **10,000 units**이고, 영상 하�
 `DEPARTMENT_IDS`에 다른 부서(예: 미국 회화, 근대 유럽 회화 등)를 추가해서 소재 풀을
 늘려야 합니다.
 
+## 확대 위치(bbox) 미리 검토하기 — "숨은 의미" 전용 (선택 사항)
+
+"숨은 의미" 영상은 각 구간마다 그림의 특정 부분을 확대해서 보여주는데, Claude가 대본과
+동시에 그 확대 좌표(bbox)도 정합니다. 자체적으로 gridPosition 대조 + AI 재검증(최대
+3회)까지 하지만, 그래도 가끔 엉뚱한 부분을 확대하는 경우가 있습니다. `npm run generate`
+대신 아래 두 단계로 나눠 실행하면, 영상을 만들기 전에 확대 위치를 직접 보고 고칠 수
+있습니다.
+
+1. **그림+대본만 생성** (나레이션/영상조립/업로드는 아직 안 함):
+   ```
+   npm run generate:review
+   ```
+   `output/review-<시각>/` 폴더에 `original.jpg`, `script.json`, `editor.html`이
+   생성됩니다. 콘솔에 정확한 폴더 경로가 출력됩니다. 이 그림은 즉시
+   `data/used-paintings.json`에 "리뷰 예약중"으로 표시되어, 자동 스케줄이 같은 그림을
+   또 뽑아가지 않습니다.
+
+2. **`editor.html`을 더블클릭(또는 브라우저로 열기)**해서 확인합니다. 각 구간의 확대
+   영역이 색깔 박스로 그림 위에 표시됩니다(회색 점선 박스는 도입/맥락/마무리처럼 전체
+   화면을 쓰는 구간이라 수정할 필요가 없습니다). 오른쪽 목록에서 각 구간의 나레이션을
+   읽으면서, 틀린 박스가 있으면 **드래그로 옮기고 오른쪽 아래 손잡이로 크기를 조절**하면
+   됩니다. 다 고쳤으면 **"script.json 내보내기"**를 눌러 새 `script.json`을 받습니다.
+
+3. 다운로드된 `script.json`을 리뷰 폴더의 기존 `script.json` 자리에 덮어씁니다(수정할
+   게 없었다면 이 단계는 생략해도 됩니다).
+
+4. **나머지(나레이션 생성 → 영상 조립 → YouTube 업로드)를 이어서 진행**:
+   ```
+   npm run build:review -- "output/review-1234567890-ab12c"
+   ```
+   (2번 단계에서 콘솔에 출력된 실제 폴더 경로를 넣으세요.) 끝나면 기존 `npm run generate`와
+   동일하게 YouTube에 비공개로 올라가고, `data/log.md`에 기록됩니다.
+
+리뷰를 시작했다가 그냥 버리기로 했다면(4번을 실행하지 않기로 했다면), 그 그림은
+`data/used-paintings.json`에 "리뷰 예약중" 상태로 영구히 남아 다시 후보에 오르지
+않습니다 — 그 그림을 다시 쓸 수 있게 하려면 `used-paintings.json`에서
+`reservedForReview: true`인 해당 항목을 직접 지우세요.
+
 ## 검수 후 공개하기
 
 1. https://studio.youtube.com → **콘텐츠** 탭에서 방금 올라온 (비공개) 영상을 확인합니다.
@@ -185,6 +223,10 @@ scripts/generate-video.mjs      "숨은 의미" 파이프라인 (그림 선정 -
 scripts/generate-process-video.mjs  "제작 과정 상상 재현"("그리는 방법") 파이프라인 (아래 별도 섹션 참고)
 scripts/generate-longform-video.mjs 그림 하나로 긴 영상 1개 + 그 영상에서 발췌한 티저 쇼츠 2개를 만드는 오케스트레이터
 scripts/get-youtube-token.mjs   최초 1회 로컬 실행용 OAuth refresh token 발급 스크립트
+scripts/generate-review.mjs     "숨은 의미" 그림 선정+대본(bbox 포함)만 생성 (npm run generate:review)
+scripts/build-from-review.mjs   리뷰 폴더의 (수정된) 대본으로 나머지 진행 (npm run build:review)
+scripts/lib/review-editor.mjs   확대 위치를 드래그로 검토/수정하는 editor.html 생성기
+scripts/lib/used-log.mjs        data/used-paintings.json, data/log.md 공통 읽기/쓰기 (여러 스크립트가 공유)
 scripts/lib/met-api.mjs         메트로폴리탄 미술관 Open Access API
 scripts/lib/anthropic.mjs       Claude(vision)로 "숨은 의미" 대본 생성 + 그림 적합성 사전 심사
 scripts/lib/process-script.mjs  Claude(vision)로 "제작 과정 상상"("그리는 방법") 대본 생성
