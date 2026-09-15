@@ -27,3 +27,4 @@
 | 2026-09-13 | The Card Players | Paul Cézanne | [p8Md7WyQRk0](https://studio.youtube.com/video/p8Md7WyQRk0/edit) |
 | 2026-09-14 | Wang Xizhi watching geese | Qian Xuan | [6s3NfUrt8Dc](https://studio.youtube.com/video/6s3NfUrt8Dc/edit) |
 | 2026-09-14 | Mars and Venus United by Love | Paolo Veronese (Paolo Caliari) | [pxZvtTJG5S4](https://studio.youtube.com/video/pxZvtTJG5S4/edit) |
+| 2026-09-15 | Woman at her dressing table | Leng Mei | [w7PBZpCYmAU](https://studio.youtube.com/video/w7PBZpCYmAU/edit) |
