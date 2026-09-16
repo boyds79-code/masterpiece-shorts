@@ -37,3 +37,4 @@
 | 2026-09-15 | The Shepherd's Song | Pierre Puvis de Chavannes | [qBxqtwt49xg](https://studio.youtube.com/video/qBxqtwt49xg/edit) |
 | 2026-09-15 | Madonna and Child | Giovanni Bellini | [MGtvSvPKoQQ](https://studio.youtube.com/video/MGtvSvPKoQQ/edit) |
 | 2026-09-15 | Joseph-Antoine Moltedo (born 1775) | Jean Auguste Dominique Ingres | [pZnSwCW-P0Y](https://studio.youtube.com/video/pZnSwCW-P0Y/edit) |
+| 2026-09-16 | Madonna and Child | Simone Martini | [JboBZZDMlMY](https://studio.youtube.com/video/JboBZZDMlMY/edit) |
