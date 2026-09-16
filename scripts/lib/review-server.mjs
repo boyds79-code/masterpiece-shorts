@@ -179,6 +179,10 @@ async function runBuildAndBroadcast(reviewDir, broadcast) {
     broadcast({ type: 'done', uploadResult });
     setTimeout(() => process.exit(0), 1500);
   } catch (err) {
+    // 실패 원인을 브라우저 로그 패널로만 보내고 터미널엔 안 찍었더니, 브라우저 탭을 이미
+    // 닫았거나 안 보고 있으면 왜 실패했는지 터미널만 봐서는 전혀 알 수 없었습니다. 반드시
+    // 터미널에도 전체 에러(스택 트레이스 포함)를 찍습니다.
+    original.error('[review-server] 실행 실패:', err);
     broadcast({ type: 'error', message: err.message });
   } finally {
     console.log = original.log;
