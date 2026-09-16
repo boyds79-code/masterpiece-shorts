@@ -197,7 +197,7 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
 <body>
 <header>
   <h1>확대 위치(bbox) 검토 — ${escapeHtml(painting?.title || '(제목 없음)')}${painting?.artistDisplayName ? ' · ' + escapeHtml(painting.artistDisplayName) : ''}</h1>
-  <p>박스를 드래그해서 옮기고, 오른쪽 아래 동그란 손잡이로 크기를 조절하세요. 겹쳐서 안 잡히면 오른쪽 목록에서 해당 번호를 클릭하면 그 박스가 맨 위로 올라와 바로 조작할 수 있습니다. 회색 점선은 "전체 화면" 구간(도입/맥락/마무리)이라 수정할 필요가 없습니다.</p>
+  <p>박스를 드래그해서 옮기고, 오른쪽 아래 동그란 손잡이로 크기를 조절하세요. 크기를 조절할 때는 항상 실제 영상 화면 비율(9:16)로 고정되므로, 박스 모양 그대로가 최종 영상에서 보일 확대 화면입니다. 겹쳐서 안 잡히면 오른쪽 목록에서 해당 번호를 클릭하면 그 박스가 맨 위로 올라와 바로 조작할 수 있습니다. 회색 점선은 "전체 화면" 구간(도입/맥락/마무리)이라 수정할 필요가 없습니다.</p>
 </header>
 <div class="layout">
   <div class="stage">
@@ -223,6 +223,16 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
   const ORIGINAL = JSON.parse(document.getElementById('review-data').textContent);
   const MIN_SIZE = ${MIN_SIZE};
   const PALETTE = ['#e0554c', '#3f8ee0', '#e0a83f', '#7c4fe0', '#3fae7d', '#e0559c', '#5f7ee0', '#c98a2c'];
+  // 최종 영상은 항상 이 크기(scripts/lib/video-builder.mjs의 WIDTH/HEIGHT)로 만들어집니다.
+  // bbox로 자른 영역을 이 비율에 맞춰 늘린 뒤 가운데를 기준으로 남는 부분을 잘라내므로,
+  // 박스가 이 비율이 아니면 편집기에 보이는 모양과 실제로 영상에 나오는 화면이 달라집니다.
+  const OUTPUT_W = 1080;
+  const OUTPUT_H = 1920;
+  // 리사이즈 중 박스의 x:y(fraction) 비율을 이 값으로 고정하면, 그림 원본 픽셀 기준으로
+  // 잘라낸 영역의 실제 가로:세로 픽셀 비율이 정확히 OUTPUT_W:OUTPUT_H가 됩니다 — 그림
+  // 자체의 원본 가로/세로 픽셀 비율(imgNaturalWidth/Height)이 1:1이 아니므로 보정이
+  // 필요합니다. 이미지가 로드된 뒤 init()에서 실제 값으로 다시 계산합니다.
+  let lockedRatio = OUTPUT_W / OUTPUT_H; // w/h, 이미지 로드 전 임시값
 
   function isFull(b) { return b.w >= 0.9 && b.h >= 0.9; }
   function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -367,11 +377,24 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
       function onMove(ev) {
         const dx = (ev.clientX - startX) / rect.width;
         const dy = (ev.clientY - startY) / rect.height;
-        working[i] = {
-          ...working[i],
-          w: clamp(b0.w + dx, MIN_SIZE, 1 - b0.x),
-          h: clamp(b0.h + dy, MIN_SIZE, 1 - b0.y),
-        };
+        const maxW = 1 - b0.x;
+        const maxH = 1 - b0.y;
+        // 가로/세로 중 사용자가 더 많이 움직인 쪽을 기준으로 크기를 정하고, 나머지 한
+        // 변은 lockedRatio(9:16)에 맞춰 그대로 따라오게 합니다 — 대각선으로 자유롭게
+        // 끌어도 항상 최종 영상 화면과 같은 비율을 유지합니다.
+        const wFromX = b0.w + dx;
+        const wFromY = (b0.h + dy) * lockedRatio;
+        let w = Math.abs(dx) >= Math.abs(dy) ? wFromX : wFromY;
+        w = clamp(w, MIN_SIZE, maxW);
+        let h = w / lockedRatio;
+        if (h > maxH) {
+          h = maxH;
+          w = clamp(h * lockedRatio, MIN_SIZE, maxW);
+        } else if (h < MIN_SIZE) {
+          h = MIN_SIZE;
+          w = clamp(h * lockedRatio, MIN_SIZE, maxW);
+        }
+        working[i] = { ...working[i], w, h };
         applyBoxStyle(i);
       }
       function onUp() {
@@ -509,7 +532,37 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  // Claude가 처음 정한 박스는 이 비율(lockedRatio)에 맞지 않을 수 있습니다 — 리사이즈를
+  // 아예 안 건드려도 처음부터 "이 박스 그대로면 최종 화면이 이렇게 나온다"를 정확히
+  // 보여주기 위해, 넓이(w*h)는 최대한 유지하면서 모양만 lockedRatio에 맞게 가운데를
+  // 기준으로 보정합니다.
+  function normalizeToLockedRatio(b) {
+    const area = Math.max(b.w * b.h, MIN_SIZE * MIN_SIZE);
+    let h = Math.sqrt(area / lockedRatio);
+    let w = h * lockedRatio;
+    if (w > 1) { w = 1; h = w / lockedRatio; }
+    if (h > 1) { h = 1; w = h * lockedRatio; }
+    if (w < MIN_SIZE) { w = MIN_SIZE; h = w / lockedRatio; }
+    if (h < MIN_SIZE) { h = MIN_SIZE; w = h * lockedRatio; }
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    return {
+      x: clamp(cx - w / 2, 0, 1 - w),
+      y: clamp(cy - h / 2, 0, 1 - h),
+      w,
+      h,
+    };
+  }
+
   function init() {
+    // bbox는 그림 원본 이미지의 가로/세로(fraction)로 저장되는데, 이 원본 이미지 자체가
+    // 정사각형이 아니므로(예: 세로로 긴 초상화, 가로로 넓은 풍경화), "잘라낸 픽셀 영역이
+    // 9:16이 되는 fraction 비율"은 그림마다 다릅니다. 그림이 로드된 뒤 실제 픽셀 크기
+    // (naturalWidth/Height)로 정확히 계산합니다.
+    if (img.naturalWidth && img.naturalHeight) {
+      lockedRatio = (OUTPUT_W * img.naturalHeight) / (OUTPUT_H * img.naturalWidth);
+    }
+    working = working.map((b) => (isFull(b) ? b : normalizeToLockedRatio(b)));
     buildBoxes();
     buildSidebar();
   }
