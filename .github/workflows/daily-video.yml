@@ -9,9 +9,6 @@ name: Generate masterpiece short
 # cron은 항상 UTC 기준입니다(https://crontab.guru) — 시간을 바꾸려면 아래 cron 값들을
 # 수정하세요.
 on:
-  schedule:
-    - cron: '5 7 * * *'
-    - cron: '5 19 * * *'
   workflow_dispatch: {}
 
 permissions:
