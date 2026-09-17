@@ -31,3 +31,4 @@
 | 2026-09-15 | The Kangxi Emperor's Southern Inspection Tour, Scroll Three: Ji'nan to Mount Tai | Wang Hui | [So1GUN2MbHk](https://studio.youtube.com/video/So1GUN2MbHk/edit) |
 | 2026-09-16 | Emma Van Name | Joshua Johnson | [UL39eJufr3Q](https://studio.youtube.com/video/UL39eJufr3Q/edit) |
 | 2026-09-16 | Saint Andrew | Simone Martini | [-UeeRokDOYU](https://studio.youtube.com/video/-UeeRokDOYU/edit) |
+| 2026-09-17 | Francesco d'Este (born ca. 1429, died after 1486) | Rogier van der Weyden | [GH_Z0_7MpaM](https://studio.youtube.com/video/GH_Z0_7MpaM/edit) |
