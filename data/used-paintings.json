@@ -525,7 +525,21 @@
     "objectID": 436603,
     "title": "Samson Captured by the Philistines",
     "artistDisplayName": "Guercino (Giovanni Francesco Barbieri)",
-    "reservedAt": "2026-09-18T01:16:06.125Z",
+    "usedAt": "2026-09-18T01:47:53.708Z",
+    "videoIdMeaning": "ydmWs5uHlrQ"
+  },
+  {
+    "objectID": 436528,
+    "title": "Irises",
+    "artistDisplayName": "Vincent van Gogh",
+    "reservedAt": "2026-09-18T01:50:14.856Z",
     "reservedForReview": true
+  },
+  {
+    "objectID": 437056,
+    "title": "Tommaso di Folco Portinari (1428–1501); Maria Portinari (Maria Maddalena Baroncelli, born 1456)",
+    "artistDisplayName": "Hans Memling",
+    "usedAt": "2026-09-18T01:57:25.326Z",
+    "videoIdMeaning": "m_G1dsonyIs"
   }
 ]
