@@ -38,3 +38,11 @@
 | 2026-09-15 | Madonna and Child | Giovanni Bellini | [MGtvSvPKoQQ](https://studio.youtube.com/video/MGtvSvPKoQQ/edit) |
 | 2026-09-15 | Joseph-Antoine Moltedo (born 1775) | Jean Auguste Dominique Ingres | [pZnSwCW-P0Y](https://studio.youtube.com/video/pZnSwCW-P0Y/edit) |
 | 2026-09-16 | Madonna and Child | Simone Martini | [JboBZZDMlMY](https://studio.youtube.com/video/JboBZZDMlMY/edit) |
+| 2026-09-16 | Hawk at Sunrise | Jeong Hong-Rae 정홍래 鄭弘來 | [aCuibj3-q_U](https://studio.youtube.com/video/aCuibj3-q_U/edit) |
+| 2026-09-16 | Venus and Adonis | Titian (Tiziano Vecellio) | [PwrK0iOerzE](https://studio.youtube.com/video/PwrK0iOerzE/edit) |
+| 2026-09-16 | Saint John on Patmos | Hans Baldung (called Hans Baldung Grien) | [dqHUCZaWS5Y](https://studio.youtube.com/video/dqHUCZaWS5Y/edit) |
+| 2026-09-16 | The Gopis Plead with Krishna to Return Their Clothing: Folio from "Isarda" Bhagavata Purana | Master of the "Isarda" Bhagavata Purana | [BpC0i_nHtYU](https://studio.youtube.com/video/BpC0i_nHtYU/edit) |
+| 2026-09-17 | The Annunciation | Hans Memling | [BokNUDSc7Qo](https://studio.youtube.com/video/BokNUDSc7Qo/edit) |
+| 2026-09-17 | Maharana Sarup Singh Inspects a Prize Stallion | Tara | [TvluHfZMS5k](https://studio.youtube.com/video/TvluHfZMS5k/edit) |
+| 2026-09-17 | Portrait of the Great Master Seosan | Unidentified artist | [-3UQYInLEkE](https://studio.youtube.com/video/-3UQYInLEkE/edit) |
+| 2026-09-17 | The Abduction of Rebecca | Eugène Delacroix | [KzBEK3DE-7o](https://studio.youtube.com/video/KzBEK3DE-7o/edit) |

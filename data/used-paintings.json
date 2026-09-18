@@ -445,6 +445,34 @@
     "videoIdMeaning": "JboBZZDMlMY"
   },
   {
+    "objectID": 860960,
+    "title": "Hawk at Sunrise",
+    "artistDisplayName": "Jeong Hong-Rae 정홍래 鄭弘來",
+    "usedAt": "2026-09-16T13:17:58.771Z",
+    "videoIdMeaning": "aCuibj3-q_U"
+  },
+  {
+    "objectID": 437826,
+    "title": "Venus and Adonis",
+    "artistDisplayName": "Titian (Tiziano Vecellio)",
+    "usedAt": "2026-09-16T13:35:32.858Z",
+    "videoIdMeaning": "PwrK0iOerzE"
+  },
+  {
+    "objectID": 435600,
+    "title": "Saint John on Patmos",
+    "artistDisplayName": "Hans Baldung (called Hans Baldung Grien)",
+    "usedAt": "2026-09-16T13:41:22.503Z",
+    "videoIdMeaning": "dqHUCZaWS5Y"
+  },
+  {
+    "objectID": 37962,
+    "title": "The Gopis Plead with Krishna to Return Their Clothing: Folio from \"Isarda\" Bhagavata Purana",
+    "artistDisplayName": "Master of the \"Isarda\" Bhagavata Purana",
+    "usedAt": "2026-09-16T13:49:30.847Z",
+    "videoIdMeaning": "BpC0i_nHtYU"
+  },
+  {
     "objectID": 437675,
     "title": "Saint Andrew",
     "artistDisplayName": "Simone Martini",
@@ -459,10 +487,45 @@
     "videoIdProcess": "GH_Z0_7MpaM"
   },
   {
+    "objectID": 437490,
+    "title": "The Annunciation",
+    "artistDisplayName": "Hans Memling",
+    "usedAt": "2026-09-17T11:39:50.542Z",
+    "videoIdMeaning": "BokNUDSc7Qo"
+  },
+  {
+    "objectID": 61429,
+    "title": "Maharana Sarup Singh Inspects a Prize Stallion",
+    "artistDisplayName": "Tara",
+    "usedAt": "2026-09-17T11:47:59.083Z",
+    "videoIdMeaning": "TvluHfZMS5k"
+  },
+  {
+    "objectID": 39889,
+    "title": "Portrait of the Great Master Seosan",
+    "artistDisplayName": "Unidentified artist",
+    "usedAt": "2026-09-17T13:04:57.177Z",
+    "videoIdMeaning": "-3UQYInLEkE"
+  },
+  {
+    "objectID": 438814,
+    "title": "The Abduction of Rebecca",
+    "artistDisplayName": "Eugène Delacroix",
+    "usedAt": "2026-09-17T13:14:46.543Z",
+    "videoIdMeaning": "KzBEK3DE-7o"
+  },
+  {
     "objectID": 78197,
     "title": "Mandala of the Sun God Surya",
     "artistDisplayName": "Kitaharasa",
     "usedAt": "2026-09-17T17:44:51.831Z",
     "videoIdProcess": "DmYvLzW9qIs"
+  },
+  {
+    "objectID": 436603,
+    "title": "Samson Captured by the Philistines",
+    "artistDisplayName": "Guercino (Giovanni Francesco Barbieri)",
+    "reservedAt": "2026-09-18T01:16:06.125Z",
+    "reservedForReview": true
   }
 ]
