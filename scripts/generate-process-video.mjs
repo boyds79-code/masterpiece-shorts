@@ -264,7 +264,6 @@ export async function buildAndUploadProcessVideo({ painting, script, imagePath, 
       finishedImagePath: imagePath,
       segments: script.segments,
       painting,
-      title: script.youtube.title,
       workDir: path.join(workDir, 'assembly'),
     });
     console.log(`[generate-process] 영상 완성: ${finalVideoPath}`);

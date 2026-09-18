@@ -345,8 +345,13 @@ const TITLE_CARD_MAX_CHARS_PER_LINE = 24;
 
 /**
  * 인트로/아웃트로용 타이틀 카드. 그림 전체를 어둡게 깔고 가운데(또는 하단)에 텍스트를 띄웁니다.
+ *
+ * topBadgeText가 주어지면(인트로 카드에서만 씁니다) 화면 맨 위에 buildThumbnail()의
+ * topBadgeText와 똑같은 스타일(노란 배지)로 얹습니다 — 썸네일이 계정 설정(휴대폰 인증 등)
+ * 때문에 실제로 적용 안 되고 YouTube가 영상 앞부분 프레임을 대신 썸네일로 골라도, 이
+ * "숨은 의미"/"어떻게 그려졌을까" 구분 배지는 영상 자체에 박혀 있으니 항상 보이게 됩니다.
  */
-export async function buildTitleCard({ imagePath, lines, durationSec, outPath }) {
+export async function buildTitleCard({ imagePath, lines, durationSec, outPath, topBadgeText }) {
   const captionFile = `${outPath}.caption.txt`;
   const wrapped = lines.map((line) => wrapText(line, TITLE_CARD_MAX_CHARS_PER_LINE));
   fs.writeFileSync(captionFile, wrapped.join('\n'));
@@ -356,6 +361,9 @@ export async function buildTitleCard({ imagePath, lines, durationSec, outPath })
     `crop=${WIDTH}:${HEIGHT}`,
     'boxblur=6:1',
     'eq=brightness=-0.25',
+    ...(topBadgeText
+      ? [`drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:text='${topBadgeText.split("'").join("\\'")}':fontsize=48:fontcolor=black:x=(w-text_w)/2:y=90:box=1:boxcolor=0xF5C242@0.95:boxborderw=22`]
+      : []),
     `drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:textfile=${escapeDrawtextPath(captionFile)}:fontsize=58:fontcolor=white:line_spacing=14:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.45:boxborderw=32`,
     'format=yuv420p',
   ].join(',');
@@ -398,14 +406,18 @@ const THUMBNAIL_BADGE_DEFAULT_TEXT = 'HOW IT WAS PAINTED';
  * 얇은 구분선을 긋습니다 — "원본 → 스케치"가 한눈에 대비되도록 하기 위해서입니다.
  * splitImagePath를 안 넘기면 예전과 동일한 letterbox 방식을 씁니다.
  *
- * title이 주어지면(제작 과정 상상 재현 파이프라인에서 영상 제목을 넘겨줍니다) 화면 위쪽에
- * 큰 글씨로 얹고, badgeText(기본값 "HOW IT WAS PAINTED")를 아래쪽에 눈에 띄는 색 배지로
- * 얹어서, 썸네일만 보고도 이 영상이 "어떻게 그려졌는지"를 보여준다는 게 바로 드러나게
- * 합니다. title을 안 넘기면(기존 "숨은 의미" 파이프라인) 텍스트 없이 예전과 동일하게
- * 그림만 꽉 채운 썸네일을 만듭니다 — 그 형식은 제작 과정이 아니라 숨은 디테일을 다루므로
- * 이 문구가 맞지 않습니다.
+ * topBadgeText가 주어지면 화면 맨 위에 눈에 띄는 색 배지로 얹습니다 — 채널에 "숨은 의미"
+ * 쇼츠와 "어떻게 그려졌을까" 쇼츠 두 축이 있다는 걸 썸네일만 보고도 바로 구분할 수
+ * 있게 하기 위한 용도로, generate-video.mjs는 'HIDDEN MEANING'을, generate-process-
+ * video.mjs는 'HOW IT WAS PAINTED'를 넘깁니다.
+ *
+ * title이 주어지면(현재는 "긴 영상" 롱폼 파이프라인만 씀) 화면 위쪽에 큰 글씨로 얹고,
+ * badgeText(기본값 "HOW IT WAS PAINTED")를 아래쪽에 눈에 띄는 색 배지로 얹습니다 —
+ * topBadgeText와는 배치가 반대(제목 위/배지 아래)이니 섞어 쓰지 않도록 주의하세요.
+ * title/badgeText/topBadgeText를 전부 안 넘기면 텍스트 없이 그림만 꽉 채운 썸네일을
+ * 만듭니다.
  */
-export async function buildThumbnail({ imagePath, splitImagePath, title, badgeText, outPath }) {
+export async function buildThumbnail({ imagePath, splitImagePath, title, badgeText, topBadgeText, outPath }) {
   const resolvedBadgeText = badgeText !== undefined ? badgeText : (title ? THUMBNAIL_BADGE_DEFAULT_TEXT : null);
 
   const inputArgs = ['-i', imagePath];
@@ -429,6 +441,13 @@ export async function buildThumbnail({ imagePath, splitImagePath, title, badgeTe
   }
 
   let lastLabel = 'merged';
+  if (topBadgeText) {
+    const escapedTopBadge = topBadgeText.split("'").join("\\'");
+    filterParts.push(
+      `[${lastLabel}]drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:text='${escapedTopBadge}':fontsize=58:fontcolor=black:x=(w-text_w)/2:y=90:box=1:boxcolor=0xF5C242@0.95:boxborderw=26[topbadged]`
+    );
+    lastLabel = 'topbadged';
+  }
   let titleCaptionFile = null;
   if (title) {
     titleCaptionFile = `${outPath}.title.txt`;
@@ -557,6 +576,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
     lines: [painting.title, `${painting.artistDisplayName}${painting.objectDate ? ' · ' + painting.objectDate : ''}`],
     durationSec: INTRO_DURATION_SEC,
     outPath: introPath,
+    topBadgeText: 'HIDDEN MEANING',
   });
   clipPaths.push(introPath);
 
@@ -594,7 +614,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
   fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
 
   const thumbnailPath = path.join(workDir, 'thumbnail.jpg');
-  await buildThumbnail({ imagePath, outPath: thumbnailPath });
+  await buildThumbnail({ imagePath, topBadgeText: 'HIDDEN MEANING', outPath: thumbnailPath });
 
   return { finalPath, srtPath, thumbnailPath };
 }
@@ -616,9 +636,12 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
  * 실제 제작 기록이 아니라 AI가 상상으로 재구성한 것임을 시청자가 나레이션을 듣기도 전에
  * 화면에서부터 알 수 있게 합니다 (대본 나레이션에만 의존하지 않는 코드 레벨 안전장치).
  *
+ * 인트로 카드와 썸네일 맨 위에는 항상 "HOW IT WAS PAINTED" 배지를 고정으로 얹습니다 —
+ * assembleVideo()가 만드는 "숨은 의미" 쇼츠와 채널에서 한눈에 구분되도록 하기 위해서입니다.
+ *
  * @returns {{ finalPath: string, srtPath: string, thumbnailPath: string }}
  */
-export async function assembleProcessVideo({ finishedImagePath, segments, painting, title, workDir }) {
+export async function assembleProcessVideo({ finishedImagePath, segments, painting, workDir }) {
   fs.mkdirSync(workDir, { recursive: true });
 
   const clipPaths = [];
@@ -633,6 +656,7 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
     ],
     durationSec: INTRO_DURATION_SEC,
     outPath: introPath,
+    topBadgeText: 'HOW IT WAS PAINTED',
   });
   clipPaths.push(introPath);
 
@@ -695,7 +719,7 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
   await buildThumbnail({
     imagePath: finishedImagePath,
     splitImagePath: sketchImagePath,
-    title,
+    topBadgeText: 'HOW IT WAS PAINTED',
     outPath: thumbnailPath,
   });
 
