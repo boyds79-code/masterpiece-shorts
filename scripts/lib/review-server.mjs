@@ -108,6 +108,9 @@ export function startReviewServer({ reviewDir, imageFile = 'original.jpg' }) {
         }
         for (const seg of updated.segments) {
           seg.bbox = clampBbox(seg.bbox);
+          // bboxTo(패닝/틸트 도착 지점)는 있을 때만 clamp합니다 — 패닝이 꺼진 구간은
+          // undefined이므로 그대로 둡니다.
+          if (seg.bboxTo) seg.bboxTo = clampBbox(seg.bboxTo);
         }
         fs.writeFileSync(scriptPath, JSON.stringify(updated, null, 2) + '\n');
         sendJson(res, 200, { ok: true });

@@ -101,7 +101,15 @@ function escapeDrawtextPath(p) {
  * 전체 그림이 아닌 경우)는 이미 특정 영역을 꽉 채워 보여주는 게 목적이므로 이 특별
  * 취급 대상이 아니고, 기존 cover 크롭 방식을 그대로 씁니다.
  */
-export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, durationSec, outPath }) {
+export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath }) {
+  // bboxTo가 주어지면(브라우저 검토 화면에서 사람이 "패닝/틸트"를 켠 경우) 정적인 줌 대신
+  // bbox -> bboxTo로 화면이 실제로 이동하는 별도 경로를 씁니다. 가로로 넓은 그림처럼 한
+  // 지점 확대만으로는 부족한 구도에 쓰라고 만든 기능이라, 기존 줌 전용 경로(이 함수의
+  // 나머지 부분)는 건드리지 않고 완전히 분리했습니다.
+  if (bboxTo) {
+    return buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath });
+  }
+
   const cw = Math.max(2, Math.round(bbox.w * imgWidth));
   const ch = Math.max(2, Math.round(bbox.h * imgHeight));
   const cx = Math.min(imgWidth - cw, Math.max(0, Math.round(bbox.x * imgWidth)));
@@ -134,6 +142,62 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, d
       `format=yuv420p[out]`,
     ].join(',');
   }
+
+  await run('ffmpeg', [
+    '-y',
+    '-loop', '1',
+    '-i', imagePath,
+    '-t', String(durationSec),
+    '-r', String(FPS),
+    '-filter_complex', filterComplex,
+    '-map', '[out]',
+    '-an',
+    outPath,
+  ]);
+
+  return outPath;
+}
+
+/**
+ * bbox에서 bboxTo로 화면이 실제로 이동(패닝/틸트, 필요하면 확대·축소도 동시에)하는
+ * 세그먼트 영상을 만듭니다. buildSegmentClip()의 정적 줌 경로와 달리, crop 필터의
+ * w/h/x/y 옵션에 't'(초 단위 타임스탬프)가 들어간 수식을 넘겨서 클립 재생 시간 동안
+ * bbox 좌표가 bboxTo 좌표로 선형 보간되도록 합니다. crop 필터의 이 네 옵션은 원래부터
+ * 타임라인(시간 변화) 지원 옵션이라 이 정도면 프레임마다 다시 계산됩니다 — ffmpeg의
+ * zoompan 대신 crop을 직접 쓰는 이유는 zoompan이 "확대"를 기준으로 설계된 필터라 순수
+ * 수평/수직 이동(가로/세로 크기는 그대로 둔 채 위치만 바뀌는 패닝/틸트)을 표현하려면
+ * 계산이 오히려 더 꼬이기 때문입니다.
+ *
+ * bbox/bboxTo는 둘 다 clampBbox()를 거친 값이라고 가정합니다 — 그래야 두 값을 선형
+ * 보간한 중간 값들도 항상 이미지 범위 안에 들어온다는 게 수학적으로 보장됩니다(각
+ * 좌표가 두 유효한 값의 가중평균이므로).
+ */
+async function buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath }) {
+  const x0 = bbox.x * imgWidth;
+  const y0 = bbox.y * imgHeight;
+  const w0 = bbox.w * imgWidth;
+  const h0 = bbox.h * imgHeight;
+  const x1 = bboxTo.x * imgWidth;
+  const y1 = bboxTo.y * imgHeight;
+  const w1 = bboxTo.w * imgWidth;
+  const h1 = bboxTo.h * imgHeight;
+
+  // t는 crop 필터가 프레임마다 자동으로 제공하는, 입력 스트림 기준 초 단위 타임스탬프입니다
+  // (w/h/x/y 옵션 자체가 타임라인 지원 옵션이라 별도 eval 설정 없이도 매 프레임 갱신됩니다).
+  // 클립 길이를 넘어서는 값이 들어오는 걸 막기 위해 0~1로 clip한 진행률(progress)을 만들어 씁니다.
+  const progress = `min(max(t/${durationSec.toFixed(3)}\,0)\,1)`;
+  const lerp = (a, b) => (Math.abs(b - a) < 0.01 ? a.toFixed(2) : `(${a.toFixed(2)}+(${(b - a).toFixed(2)})*${progress})`);
+
+  const xExpr = lerp(x0, x1);
+  const yExpr = lerp(y0, y1);
+  const wExpr = lerp(w0, w1);
+  const hExpr = lerp(h0, h1);
+
+  const filterComplex = [
+    `[0:v]crop=w='${wExpr}':h='${hExpr}':x='${xExpr}':y='${yExpr}'`,
+    `scale=${WIDTH}:${HEIGHT}`,
+    `format=yuv420p[out]`,
+  ].join(',');
 
   await run('ffmpeg', [
     '-y',
@@ -590,6 +654,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
       imgWidth,
       imgHeight,
       bbox: seg.bbox,
+      bboxTo: seg.bboxTo,
       durationSec: seg.durationSec,
       outPath: rawVideo,
     });
@@ -682,6 +747,7 @@ export async function assembleProcessVideo({ finishedImagePath, segments, painti
         imgWidth,
         imgHeight,
         bbox,
+        bboxTo: seg.bboxTo,
         durationSec: seg.durationSec,
         outPath: rawVideo,
       });
@@ -808,6 +874,7 @@ export async function assembleLongformBundle({ finishedImagePath, segments, pain
         imgWidth,
         imgHeight,
         bbox,
+        bboxTo: seg.bboxTo,
         durationSec: seg.durationSec,
         outPath: rawVideo,
       });

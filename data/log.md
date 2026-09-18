@@ -48,3 +48,4 @@
 | 2026-09-17 | The Abduction of Rebecca | Eugène Delacroix | [KzBEK3DE-7o](https://studio.youtube.com/video/KzBEK3DE-7o/edit) |
 | 2026-09-18 | Samson Captured by the Philistines | Guercino (Giovanni Francesco Barbieri) | [ydmWs5uHlrQ](https://studio.youtube.com/video/ydmWs5uHlrQ/edit) |
 | 2026-09-18 | Tommaso di Folco Portinari (1428–1501); Maria Portinari (Maria Maddalena Baroncelli, born 1456) | Hans Memling | [m_G1dsonyIs](https://studio.youtube.com/video/m_G1dsonyIs/edit) |
+| 2026-09-18 | A Woman Seated beside a Vase of Flowers (Madame Paul Valpinçon?) | Edgar Degas | [ShK7OUZdmzM](https://studio.youtube.com/video/ShK7OUZdmzM/edit) |

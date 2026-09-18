@@ -34,8 +34,10 @@ export async function runBuildFromReviewDir(reviewDir) {
     throw new Error('script.json에 segments가 없습니다.');
   }
   // 저장된 값이라도 혹시 모를 실수(범위 밖 좌표 등)에 대비해 다시 clamp.
+  // bboxTo(패닝/틸트 도착 지점)는 켜져 있는 구간에만 존재하므로 있을 때만 clamp합니다.
   for (const seg of script.segments) {
     seg.bbox = clampBbox(seg.bbox);
+    if (seg.bboxTo) seg.bboxTo = clampBbox(seg.bboxTo);
   }
 
   console.log(`[build-from-review] "${painting.title}" — ${painting.artistDisplayName} (${script.segments.length}개 세그먼트) 빌드를 시작합니다.`);
