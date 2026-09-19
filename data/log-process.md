@@ -35,3 +35,4 @@
 | 2026-09-17 | Mandala of the Sun God Surya | Kitaharasa | [DmYvLzW9qIs](https://studio.youtube.com/video/DmYvLzW9qIs/edit) |
 | 2026-09-18 | Water-moon Avalokiteshvara | Unidentified artist | [k_ujgle0-OU](https://studio.youtube.com/video/k_ujgle0-OU/edit) |
 | 2026-09-19 | The Abduction of the Sabine Women | Nicolas Poussin | [j1YUtURjN2Y](https://studio.youtube.com/video/j1YUtURjN2Y/edit) |
+| 2026-09-19 | The Repast of the Lion | Henri Rousseau (le Douanier) | [FJV9GbB35L4](https://studio.youtube.com/video/FJV9GbB35L4/edit) |
