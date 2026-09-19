@@ -550,6 +550,34 @@
     "videoIdMeaning": "ShK7OUZdmzM"
   },
   {
+    "objectID": 438821,
+    "title": "Ia Orana Maria (Hail Mary)",
+    "artistDisplayName": "Paul Gauguin",
+    "usedAt": "2026-09-18T03:31:44.708Z",
+    "videoIdMeaning": "fXCCdf6TC8E"
+  },
+  {
+    "objectID": 436819,
+    "title": "Mäda Primavesi (1903–2000)",
+    "artistDisplayName": "Gustav Klimt",
+    "usedAt": "2026-09-18T05:15:44.777Z",
+    "videoIdMeaning": "K0S8eHYE24s"
+  },
+  {
+    "objectID": 437455,
+    "title": "The Holy Family with Saints Anne and Catherine of Alexandria",
+    "artistDisplayName": "Jusepe de Ribera (called Lo Spagnoletto)",
+    "usedAt": "2026-09-18T05:26:53.475Z",
+    "videoIdMeaning": "f8AVNf7p4Gs"
+  },
+  {
+    "objectID": 436966,
+    "title": "The Adoration of the Shepherds",
+    "artistDisplayName": "Andrea Mantegna",
+    "usedAt": "2026-09-18T05:37:32.373Z",
+    "videoIdMeaning": "6a9UxVuo0v0"
+  },
+  {
     "objectID": 36029,
     "title": "Water-moon Avalokiteshvara",
     "artistDisplayName": "Unidentified artist",
@@ -557,11 +585,61 @@
     "videoIdProcess": "k_ujgle0-OU"
   },
   {
+    "objectID": 435809,
+    "title": "The Harvesters",
+    "artistDisplayName": "Pieter Bruegel the Elder",
+    "usedAt": "2026-09-19T03:24:55.577Z",
+    "videoIdMeaning": "9UeFR4TuUuY"
+  },
+  {
+    "objectID": 437175,
+    "title": "Virgin and Child",
+    "artistDisplayName": "Bartolomé Estebán Murillo",
+    "usedAt": "2026-09-19T03:35:11.854Z",
+    "videoIdMeaning": "nCnbamE2YyY"
+  },
+  {
+    "objectID": 436658,
+    "title": "Hermann von Wedigh III (died 1560)",
+    "artistDisplayName": "Hans Holbein the Younger",
+    "usedAt": "2026-09-19T03:51:41.343Z",
+    "videoIdMeaning": "eVFep_rsuD4"
+  },
+  {
+    "objectID": 437879,
+    "title": "Study of a Young Woman",
+    "artistDisplayName": "Johannes Vermeer",
+    "skippedAt": "2026-09-19T04:25:31.387Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is a classic single-sitter portrait bust showing just a young woman's head and shoulders against a plain dark background. While it appears to be a high-quality Vermeer-style portrait with beautiful technique (the characteristic blue garment, pearl earring, subtle lighting)"
+  },
+  {
+    "objectID": 437329,
+    "title": "The Abduction of the Sabine Women",
+    "artistDisplayName": "Nicolas Poussin",
+    "usedAt": "2026-09-19T04:37:58.726Z",
+    "videoIdMeaning": "wkeQAxov-SU"
+  },
+  {
     "objectID": 437329,
     "title": "The Abduction of the Sabine Women",
     "artistDisplayName": "Nicolas Poussin",
     "usedAt": "2026-09-19T05:51:19.471Z",
     "videoIdProcess": "j1YUtURjN2Y"
+  },
+  {
+    "objectID": 436095,
+    "title": "The Third-Class Carriage",
+    "artistDisplayName": "Honoré Daumier",
+    "usedAt": "2026-09-19T10:14:15.817Z",
+    "videoIdMeaning": "ZUjWXJwnCWI"
+  },
+  {
+    "objectID": 435826,
+    "title": "The Love Song",
+    "artistDisplayName": "Sir Edward Burne-Jones",
+    "usedAt": "2026-09-19T13:45:09.012Z",
+    "videoIdMeaning": "G3Hs8oZMVh4"
   },
   {
     "objectID": 438822,
@@ -578,7 +656,20 @@
     "videoIdProcess": "qGFP3R-3WsA"
   },
   {
-    "objectID": 39888,
+    "objectID": 436516,
+    "title": "The Triumph of Fame; (reverse) Impresa of the Medici Family and Arms of the Medici and Tornabuoni Families",
+    "artistDisplayName": "Giovanni di ser Giovanni Guidi (called Scheggia)",
+    "usedAt": "2026-09-20T13:54:27.179Z",
+    "videoIdMeaning": "ahjce_JqgQk"
+  },
+  {
+    "objectID": 437769,
+    "title": "Clothing the Naked",
+    "artistDisplayName": "Michiel Sweerts",
+    "usedAt": "2026-09-20T14:45:45.803Z",
+    "videoIdMeaning": "gOBwncKoAE4"
+  },
+  {    "objectID": 39888,
     "title": "Wild geese descending to sandbar",
     "artistDisplayName": "Unidentified artist",
     "usedAt": "2026-09-20T16:54:19.807Z",

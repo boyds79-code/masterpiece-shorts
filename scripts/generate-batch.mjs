@@ -1,3 +1,4 @@
+import './lib/load-env.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 

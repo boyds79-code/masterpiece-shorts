@@ -6,12 +6,13 @@
 // 사용법:
 //   1. .env에 YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET을 먼저 채워두세요.
 //      (Google Cloud Console에서 만든 OAuth 2.0 클라이언트 ID — 유형은 "데스크톱 앱")
-//   2. set -a && source .env && set +a
-//   3. npm run get-youtube-token
-//   4. 터미널에 뜨는 URL을 브라우저에서 열고, 채널 소유 구글 계정으로 로그인 후 허용
-//   5. 터미널에 refresh token이 출력되면 그대로 복사해서 GitHub Secret
+//      (.env는 lib/load-env.mjs가 자동으로 읽어오므로 따로 source할 필요는 없습니다.)
+//   2. npm run get-youtube-token
+//   3. 터미널에 뜨는 URL을 브라우저에서 열고, 채널 소유 구글 계정으로 로그인 후 허용
+//   4. 터미널에 refresh token이 출력되면 그대로 복사해서 GitHub Secret
 //      YOUTUBE_REFRESH_TOKEN에 등록하세요.
 
+import './lib/load-env.mjs';
 import http from 'node:http';
 import { google } from 'googleapis';
 
@@ -22,7 +23,7 @@ const REDIRECT_URI = `http://127.0.0.1:${PORT}/oauth2callback`;
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
   console.error('❌ YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET이 환경변수에 없습니다.');
-  console.error('   .env에 값을 채운 뒤 `set -a && source .env && set +a`로 불러오고 다시 실행하세요.');
+  console.error('   .env에 값을 채운 뒤 다시 실행하세요.');
   process.exit(1);
 }
 

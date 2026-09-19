@@ -49,3 +49,15 @@
 | 2026-09-18 | Samson Captured by the Philistines | Guercino (Giovanni Francesco Barbieri) | [ydmWs5uHlrQ](https://studio.youtube.com/video/ydmWs5uHlrQ/edit) |
 | 2026-09-18 | Tommaso di Folco Portinari (1428–1501); Maria Portinari (Maria Maddalena Baroncelli, born 1456) | Hans Memling | [m_G1dsonyIs](https://studio.youtube.com/video/m_G1dsonyIs/edit) |
 | 2026-09-18 | A Woman Seated beside a Vase of Flowers (Madame Paul Valpinçon?) | Edgar Degas | [ShK7OUZdmzM](https://studio.youtube.com/video/ShK7OUZdmzM/edit) |
+| 2026-09-18 | Ia Orana Maria (Hail Mary) | Paul Gauguin | [fXCCdf6TC8E](https://studio.youtube.com/video/fXCCdf6TC8E/edit) |
+| 2026-09-18 | Mäda Primavesi (1903–2000) | Gustav Klimt | [K0S8eHYE24s](https://studio.youtube.com/video/K0S8eHYE24s/edit) |
+| 2026-09-18 | The Holy Family with Saints Anne and Catherine of Alexandria | Jusepe de Ribera (called Lo Spagnoletto) | [f8AVNf7p4Gs](https://studio.youtube.com/video/f8AVNf7p4Gs/edit) |
+| 2026-09-18 | The Adoration of the Shepherds | Andrea Mantegna | [6a9UxVuo0v0](https://studio.youtube.com/video/6a9UxVuo0v0/edit) |
+| 2026-09-19 | The Harvesters | Pieter Bruegel the Elder | [9UeFR4TuUuY](https://studio.youtube.com/video/9UeFR4TuUuY/edit) |
+| 2026-09-19 | Virgin and Child | Bartolomé Estebán Murillo | [nCnbamE2YyY](https://studio.youtube.com/video/nCnbamE2YyY/edit) |
+| 2026-09-19 | Hermann von Wedigh III (died 1560) | Hans Holbein the Younger | [eVFep_rsuD4](https://studio.youtube.com/video/eVFep_rsuD4/edit) |
+| 2026-09-19 | The Abduction of the Sabine Women | Nicolas Poussin | [wkeQAxov-SU](https://studio.youtube.com/video/wkeQAxov-SU/edit) |
+| 2026-09-19 | The Third-Class Carriage | Honoré Daumier | [ZUjWXJwnCWI](https://studio.youtube.com/video/ZUjWXJwnCWI/edit) |
+| 2026-09-19 | The Love Song | Sir Edward Burne-Jones | [G3Hs8oZMVh4](https://studio.youtube.com/video/G3Hs8oZMVh4/edit) |
+| 2026-09-20 | The Triumph of Fame; (reverse) Impresa of the Medici Family and Arms of the Medici and Tornabuoni Families | Giovanni di ser Giovanni Guidi (called Scheggia) | [ahjce_JqgQk](https://studio.youtube.com/video/ahjce_JqgQk/edit) |
+| 2026-09-20 | Clothing the Naked | Michiel Sweerts | [gOBwncKoAE4](https://studio.youtube.com/video/gOBwncKoAE4/edit) |

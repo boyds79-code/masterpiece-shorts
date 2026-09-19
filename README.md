@@ -49,8 +49,8 @@ YouTube Studio에서 직접 확인한 뒤 공개로 전환해야 실제로 사�
 ```bash
 npm install
 cp .env.example .env
-# .env에 아래 "2~4" 단계에서 발급받을 키들을 채우세요
-set -a && source .env && set +a
+# .env에 아래 "2~4" 단계에서 발급받을 키들을 채우세요 — npm run 스크립트들이 이 파일을
+# 자동으로 읽으므로 따로 source할 필요는 없습니다
 npm run generate   # 실제로 그림 선정 -> 대본 -> 음성 -> 영상 -> 업로드까지 한 번 실행
 ```
 
@@ -83,7 +83,6 @@ https://aistudio.google.com/apikey 에서 무료로 발급 (역시 재사용 가
 
 **4-4. Refresh token 발급 (최초 1회, 당신의 맥에서 직접 실행)**
 ```bash
-set -a && source .env && set +a
 npm run get-youtube-token
 ```
 브라우저가 자동으로 열립니다 (안 열리면 터미널에 뜬 URL을 직접 여세요). 채널 소유 계정으로
@@ -428,7 +427,6 @@ Run workflow**.
 ## 로컬에서 다시 테스트하기
 
 ```bash
-set -a && source .env && set +a
 npm run generate
 ```
 
