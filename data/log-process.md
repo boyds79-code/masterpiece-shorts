@@ -34,3 +34,4 @@
 | 2026-09-17 | Francesco d'Este (born ca. 1429, died after 1486) | Rogier van der Weyden | [GH_Z0_7MpaM](https://studio.youtube.com/video/GH_Z0_7MpaM/edit) |
 | 2026-09-17 | Mandala of the Sun God Surya | Kitaharasa | [DmYvLzW9qIs](https://studio.youtube.com/video/DmYvLzW9qIs/edit) |
 | 2026-09-18 | Water-moon Avalokiteshvara | Unidentified artist | [k_ujgle0-OU](https://studio.youtube.com/video/k_ujgle0-OU/edit) |
+| 2026-09-19 | The Abduction of the Sabine Women | Nicolas Poussin | [j1YUtURjN2Y](https://studio.youtube.com/video/j1YUtURjN2Y/edit) |
