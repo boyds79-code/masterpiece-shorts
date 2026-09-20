@@ -36,3 +36,4 @@
 | 2026-09-18 | Water-moon Avalokiteshvara | Unidentified artist | [k_ujgle0-OU](https://studio.youtube.com/video/k_ujgle0-OU/edit) |
 | 2026-09-19 | The Abduction of the Sabine Women | Nicolas Poussin | [j1YUtURjN2Y](https://studio.youtube.com/video/j1YUtURjN2Y/edit) |
 | 2026-09-19 | The Repast of the Lion | Henri Rousseau (le Douanier) | [FJV9GbB35L4](https://studio.youtube.com/video/FJV9GbB35L4/edit) |
+| 2026-09-20 | Joseph-Antoine Moltedo (born 1775) | Jean Auguste Dominique Ingres | [qGFP3R-3WsA](https://studio.youtube.com/video/qGFP3R-3WsA/edit) |
