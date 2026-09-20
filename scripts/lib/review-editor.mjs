@@ -6,7 +6,7 @@
 
 const MIN_SIZE = 0.12; // scripts/lib/anthropic.mjs의 MIN_SIZE와 맞춰둠 — 너무 작은 crop 방지
 
-function escapeHtml(s) {
+export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 

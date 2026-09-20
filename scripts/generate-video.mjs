@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { pickUnusedPainting, downloadImage } from './lib/met-api.mjs';
-import { generateVideoScript, evaluatePaintingSuitability } from './lib/anthropic.mjs';
+import { generateVideoScript, generateHiddenDetailCandidates, evaluatePaintingSuitability } from './lib/anthropic.mjs';
 import { generateNarrationAudio } from './lib/gemini-tts.mjs';
 import { assembleVideo } from './lib/video-builder.mjs';
 import { uploadVideo, uploadCaptions, uploadThumbnail } from './lib/youtube-upload.mjs';
@@ -35,20 +35,22 @@ async function makeVisionCopy(originalPath, outPath) {
 const MAX_PAINTING_ATTEMPTS = 6;
 
 /**
- * 아직 안 쓴 그림을 하나 골라서 Claude에게 보여주고 "숨은 의미" 대본(세그먼트별 bbox 포함)을
- * 받아옵니다. 소재가 단조롭거나 민감해서 거절되는 그림은 건너뛰고 다음 후보로 재시도합니다.
- * generateOneVideo()가 곧바로 영상까지 만들 때 쓰고, generate-review.mjs는 여기서 멈춰서
- * 대본/bbox를 사람이 검토할 수 있게 파일로 저장하는 데 씁니다.
+ * 아직 안 쓴 그림을 하나 고르고, 소재가 단조롭거나 민감해서 거절되는 그림은 건너뛰면서
+ * produceDeliverable()에게 최종 결과물을 맡기는 공통 재시도 루프입니다.
+ * selectPaintingAndScript()(자동 실행 — Claude가 디테일까지 전부 자유롭게 고름)와
+ * selectPaintingAndCandidates()(리뷰 화면 — 사람이 고를 후보만 먼저 뽑음)가 그림 선정/
+ * 적합성 심사 부분을 중복 없이 공유하기 위해 뽑아냈습니다.
  *
- * @param {object} params
- * @param {string} params.workDir - 원본 이미지 등을 저장할 폴더 (호출자가 미리 만들어둬야 함)
- * @returns {Promise<{ painting: object, script: object, imagePath: string }>}
- *   MAX_PAINTING_ATTEMPTS번 다 실패하면 CONTENT_REFUSAL 코드의 에러를 던집니다.
+ * produceDeliverable({ candidate, imagePath, visionPath })가 CONTENT_REFUSAL 코드의
+ * 에러를 던지면(민감한 소재로 추정) 이 그림만 건너뛰고 다음 후보로 재시도하고, 그 외
+ * 에러는(과금/네트워크 등 그림과 무관한 문제) 그대로 위로 던집니다.
+ *
+ * @returns {Promise<{ painting: object, deliverable: any, imagePath: string, visionPath: string } | null>}
  */
-export async function selectPaintingAndScript({ workDir }) {
+async function pickPaintingAndProduce({ workDir, produceDeliverable }) {
   const usedList = loadUsed();
   let painting = null;
-  let script = null;
+  let deliverable = null;
   let imagePath, visionPath;
 
   for (let attempt = 1; attempt <= MAX_PAINTING_ATTEMPTS; attempt++) {
@@ -104,16 +106,8 @@ export async function selectPaintingAndScript({ workDir }) {
       continue;
     }
 
-    console.log('[generate-video] Claude에게 그림을 보여주고 대본을 받는 중...');
     try {
-      script = await generateVideoScript({
-        painting: candidate,
-        imageBufferForVision: fs.readFileSync(visionPath),
-        imagePath: visionPath,
-        imageMediaType: 'image/jpeg',
-        apiKey: process.env.ANTHROPIC_API_KEY,
-        model: process.env.CLAUDE_MODEL,
-      });
+      deliverable = await produceDeliverable({ candidate, imagePath, visionPath });
       painting = candidate;
       break;
     } catch (err) {
@@ -122,12 +116,12 @@ export async function selectPaintingAndScript({ workDir }) {
         // (예: "credit balance too low"). 이런 경우 이 그림을 영구히 제외 목록에 넣는 건
         // 억울하므로 블랙리스트에 올리지 않고, 다른 그림으로도 재시도하지 않은 채 바로
         // 에러를 던져서 위(배치 스크립트 등) 호출자가 문제를 알아채게 합니다.
-        console.error(`[generate-video] "${candidate.title}" 대본 생성 중 그림과 무관한 오류 발생 — 이 그림은 블랙리스트에 넣지 않고 바로 중단합니다: ${err.message}`);
+        console.error(`[generate-video] "${candidate.title}" 처리 중 그림과 무관한 오류 발생 — 이 그림은 블랙리스트에 넣지 않고 바로 중단합니다: ${err.message}`);
         fs.rmSync(imagePath, { force: true });
         fs.rmSync(visionPath, { force: true });
         throw err;
       }
-      console.warn(`[generate-video] "${candidate.title}" 대본 생성 실패(민감한 소재로 추정), 다른 그림으로 넘어갑니다: ${err.message}`);
+      console.warn(`[generate-video] "${candidate.title}" 처리 실패(민감한 소재로 추정), 다른 그림으로 넘어갑니다: ${err.message}`);
       usedList.push({
         objectID: candidate.objectID,
         title: candidate.title,
@@ -149,10 +143,76 @@ export async function selectPaintingAndScript({ workDir }) {
     );
   }
 
+  return { painting, deliverable, imagePath, visionPath };
+}
+
+/**
+ * 아직 안 쓴 그림을 하나 골라서 Claude에게 보여주고 "숨은 의미" 대본(세그먼트별 bbox 포함,
+ * 디테일 선정까지 Claude가 전부 자유롭게 판단)을 받아옵니다. generateOneVideo()가 곧바로
+ * 영상까지 만들 때 씁니다 — 사람이 디테일을 먼저 고르게 하려면 selectPaintingAndCandidates()
+ * -> (리뷰 화면에서 선택) -> generateVideoScript({ selectedDetails }) 흐름을 쓰세요
+ * (generate-review.mjs 참고).
+ *
+ * @param {object} params
+ * @param {string} params.workDir - 원본 이미지 등을 저장할 폴더 (호출자가 미리 만들어둬야 함)
+ * @returns {Promise<{ painting: object, script: object, imagePath: string }>}
+ *   MAX_PAINTING_ATTEMPTS번 다 실패하면 CONTENT_REFUSAL 코드의 에러를 던집니다.
+ */
+export async function selectPaintingAndScript({ workDir }) {
+  const result = await pickPaintingAndProduce({
+    workDir,
+    produceDeliverable: ({ candidate, visionPath }) =>
+      generateVideoScript({
+        painting: candidate,
+        imageBufferForVision: fs.readFileSync(visionPath),
+        imagePath: visionPath,
+        imageMediaType: 'image/jpeg',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.CLAUDE_MODEL,
+      }),
+  });
+  if (!result) return null;
+
+  const { painting, deliverable: script, imagePath, visionPath } = result;
   fs.rmSync(visionPath, { force: true }); // 대본 생성에만 쓰는 축소 사본, 더 이상 필요 없음
   console.log(`[generate-video] 대본 완성 — 세그먼트 ${script.segments.length}개, 제목: "${script.youtube.title}"`);
 
   return { painting, script, imagePath };
+}
+
+/**
+ * 아직 안 쓴 그림을 하나 골라서 Claude에게 보여주고 "숨은 의미" 후보 디테일을 6~10개
+ * 뽑습니다(아직 나레이션 확정 전) — generate-review.mjs가 이 결과를 브라우저에 보여줘서
+ * 사람이 몇 개를 고르게 하고, 고른 뒤 generateVideoScript({ selectedDetails })로 최종
+ * 대본을 만듭니다.
+ *
+ * vision 사본(visionPath)은 나중에(사람이 고른 뒤) 최종 대본을 만들 때 같은 그림을 다시
+ * 심사하지 않고 재사용할 수 있도록, selectPaintingAndScript()와 달리 여기서는 지우지
+ * 않고 그대로 workDir에 남겨둡니다.
+ *
+ * @param {object} params
+ * @param {string} params.workDir - 원본 이미지 등을 저장할 폴더 (호출자가 미리 만들어둬야 함)
+ * @returns {Promise<{ painting: object, candidates: object, imagePath: string, visionPath: string }>}
+ *   MAX_PAINTING_ATTEMPTS번 다 실패하면 CONTENT_REFUSAL 코드의 에러를 던집니다.
+ */
+export async function selectPaintingAndCandidates({ workDir }) {
+  const result = await pickPaintingAndProduce({
+    workDir,
+    produceDeliverable: ({ candidate, visionPath }) =>
+      generateHiddenDetailCandidates({
+        painting: candidate,
+        imageBufferForVision: fs.readFileSync(visionPath),
+        imageMediaType: 'image/jpeg',
+        apiKey: process.env.ANTHROPIC_API_KEY,
+        model: process.env.CLAUDE_MODEL,
+      }),
+  });
+  if (!result) return null;
+
+  const { painting, deliverable: candidates, imagePath, visionPath } = result;
+  console.log(`[generate-video] 후보 디테일 ${candidates.candidates.length}개 완성 — "${painting.title}"`);
+
+  return { painting, candidates, imagePath, visionPath };
 }
 
 /**

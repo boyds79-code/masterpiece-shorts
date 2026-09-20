@@ -116,6 +116,319 @@ export async function evaluatePaintingSuitability({ imageBufferForVision, imageM
   return toolUse.input;
 }
 
+// generateVideoScript()와 generateHiddenDetailCandidates()가 공통으로 쓰는 메타데이터
+// 텍스트 블록을 만듭니다 — 두 곳에서 똑같은 형식을 유지하려고 한 곳으로 모았습니다.
+function buildMetadataBlock(painting) {
+  return [
+    `Title: ${painting.title}`,
+    `Artist: ${painting.artistDisplayName || 'Unknown'}`,
+    painting.artistDisplayBio ? `Artist bio: ${painting.artistDisplayBio}` : null,
+    `Date: ${painting.objectDate || 'Unknown'}`,
+    `Medium: ${painting.medium || 'Unknown'}`,
+    painting.culture ? `Culture: ${painting.culture}` : null,
+    painting.department ? `Department: ${painting.department}` : null,
+    painting.creditLine ? `Credit line: ${painting.creditLine}` : null,
+    painting.dimensions ? `Dimensions: ${painting.dimensions}` : null,
+    `Source: The Metropolitan Museum of Art, object #${painting.objectID}, ${painting.objectURL}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+// 리뷰 화면에서 "이 그림의 숨은 이야기들"을 사람이 먼저 보고 몇 개를 고를 수 있게 하기
+// 위해, 최종 대본(narration까지 확정)을 한 번에 만들지 않고 먼저 "후보" 디테일을
+// 넉넉하게(6~10개) 뽑기만 합니다. teaser는 최종 시청자용 나레이션이 아니라, 이 화면을
+// 보는 제작자(사람)가 "이거 넣을 만한가?"를 판단할 수 있게 실제 해석(payoff)까지
+// 담아서 씁니다 — 애매하게 궁금증만 유발하는 문구면 판단이 안 되니까요.
+const CANDIDATE_DETAILS_SYSTEM_PROMPT = `You are brainstorming candidate hidden-meaning "reveal" details for a YouTube Shorts video about a painting — for a human creator to screen BEFORE the final script is written. This is a menu of options, not the final narration, so each one must include the actual payoff (what it means / why it matters), not just a vague tease, so the human can judge genuine interest.
+
+You will be shown an actual photo of the painting, plus its museum metadata. Look closely at the image itself — real details you can actually see (facial expressions, gestures, hidden symbols, background elements, brushwork, light source, composition) — and propose details that are ACTUALLY visible, not generic art-history filler.
+
+Propose 6 to 10 candidate details. Each one must be a single, specific, visually-locatable detail (never "the overall mood" or "the color palette as a whole") with a genuine interpretive payoff: what it symbolizes, what it reveals about the subject/artist/era, a secret or joke or warning it encodes, or why art historians find it significant. Avoid five variations on the same observation — vary what kind of detail you pick. Only propose things you're reasonably confident about from the given metadata or well-established, uncontroversial art history; flag genuine scholarly debate ("some art historians believe...") rather than asserting it as settled fact; never invent anecdotes unsupported by evidence.
+
+For each candidate:
+- "focus": a short label (3-6 words) for what the crop shows, e.g. "her folded hands".
+- "gridPosition": mentally divide the image into a 3x3 grid (top/middle/bottom x left/center/right) and name the cell(s) containing the detail. Do this BEFORE picking bbox numbers.
+- "bbox": fractions 0.0-1.0 of the full image (x,y = top-left corner, w,h = width/height). Constraints: 0<=x, 0<=y, x+w<=1, y+h<=1, w>=0.12, h>=0.12 (never absurdly tiny). Double-check it's actually consistent with the gridPosition you named.
+- "teaser": 1-3 sentences written FOR THE CREATOR who is deciding whether to include this in the video — explain what the detail is AND its actual interpretive payoff, so they can judge real interest without having to guess what you meant.
+- "recommended": true for the details you would personally pick first if you could only choose five — your best, most surprising, most confidently-sourced ones.
+
+You must respond by calling "submit_candidates" exactly once.`;
+
+/**
+ * 그림 하나에 대해 "숨은 의미" 후보 디테일을 6~10개 뽑습니다 (최종 나레이션은 아직 없음).
+ * 사람이 이 중 몇 개를 고르면, 그 선택으로 generateVideoScript()를 다시 불러서 최종
+ * 대본(나레이션 확정)을 만듭니다 — 두 단계로 나눈 이유는 review-editor.mjs의 안내를
+ * 참고하세요.
+ *
+ * @returns {Promise<{ candidates: Array<{id,focus,gridPosition,bbox,teaser,recommended}> }>}
+ */
+export async function generateHiddenDetailCandidates({ painting, imageBufferForVision, imageMediaType, apiKey, model }) {
+  apiKey = apiKey?.trim();
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY가 설정되어 있지 않습니다. GitHub Actions Secret 또는 로컬 .env를 확인하세요.');
+  }
+
+  const metadataBlock = buildMetadataBlock(painting);
+
+  const body = {
+    model: model || DEFAULT_MODEL,
+    max_tokens: 4096,
+    system: CANDIDATE_DETAILS_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: imageMediaType,
+              data: imageBufferForVision.toString('base64'),
+            },
+          },
+          {
+            type: 'text',
+            text: `Here is the painting's museum metadata:\n\n${metadataBlock}\n\nPropose the candidate hidden-meaning details now.`,
+          },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: 'submit_candidates',
+        description: 'Submit candidate hidden-meaning details for a human to screen before the final script is written.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            candidates: {
+              type: 'array',
+              minItems: 6,
+              maxItems: 10,
+              items: {
+                type: 'object',
+                properties: {
+                  focus: { type: 'string' },
+                  gridPosition: { type: 'string' },
+                  bbox: {
+                    type: 'object',
+                    properties: {
+                      x: { type: 'number' },
+                      y: { type: 'number' },
+                      w: { type: 'number' },
+                      h: { type: 'number' },
+                    },
+                    required: ['x', 'y', 'w', 'h'],
+                  },
+                  teaser: { type: 'string' },
+                  recommended: { type: 'boolean' },
+                },
+                required: ['focus', 'gridPosition', 'bbox', 'teaser', 'recommended'],
+              },
+            },
+          },
+          required: ['candidates'],
+        },
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'submit_candidates' },
+  };
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Claude 후보 디테일 API 호출 실패 (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_candidates');
+  if (!toolUse) {
+    throw new Error('Claude 응답에서 submit_candidates tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
+  }
+
+  const candidates = toolUse.input.candidates.map((c, i) => {
+    const candidate = {
+      id: `d${i + 1}`,
+      focus: c.focus,
+      gridPosition: c.gridPosition,
+      bbox: clampBbox(c.bbox),
+      teaser: c.teaser,
+      recommended: !!c.recommended,
+    };
+    reconcileBboxWithGridPosition(candidate); // bbox가 gridPosition 라벨과 어긋나면 여기서 바로 보정
+    return candidate;
+  });
+
+  return { candidates };
+}
+
+/**
+ * generateVideoScript()가 selectedDetails를 받았을 때 위임하는 내부 함수입니다. 이미
+ * 사람이 고른 디테일들의 focus/gridPosition/bbox는 그대로 두고(이 함수는 손대지 않음),
+ * Claude에게는 (1) 보여줄 순서, (2) 각 디테일의 실제 나레이션 문장, (3) IDENTIFY/CONTEXT/
+ * CLOSE 나레이션, (4) YouTube 메타데이터만 맡깁니다 — 자유 선택 경로보다 스키마가 훨씬
+ * 단순해서 실패 여지가 적고, 사람이 확인한 확대 위치가 뒤에서 바뀌는 일도 없습니다.
+ */
+async function generateNarrationForSelectedDetails({ painting, imageBufferForVision, imageMediaType, apiKey, model, metadataBlock, selectedDetails }) {
+  const detailsBlock = selectedDetails
+    .map((d, i) => `${i + 1}. id="${d.id}" — focus: "${d.focus}" (region: ${d.gridPosition})\n   Payoff to convey: ${d.teaser}`)
+    .join('\n\n');
+
+  const systemPrompt = `You are a scriptwriter for a YouTube Shorts channel that decodes the HIDDEN MEANINGS inside famous public-domain paintings — symbols, secrets, jokes, political messages, and psychological details that most viewers would walk right past — similar in spirit to popular Instagram art-explainer accounts, but written to be read aloud as narration over a video.
+
+A human editor has ALREADY chosen exactly which hidden details this specific video will reveal (listed below, each with the region of the painting it zooms into and its interpretive payoff). Your job now is ONLY to:
+1. Pick the best storytelling order for these details (in the "reveals" you return) — usually accessible-to-surprising, or a thread that connects them, rather than leaving them in the order listed.
+2. Write the actual spoken narration for each of them, plus an opening IDENTIFY line, a CONTEXT line, and a closing CLOSE line that ties everything together.
+3. Write the YouTube title/description/tags.
+
+Do NOT introduce new details, drop any of the given details, or change which regions are shown — the crop regions are already fixed and out of scope here. Just write the words, in a good order.
+
+THE MOST IMPORTANT RULE — avoid flat description: never just describe what a detail looks like. Every reveal narration must explain WHY it matters, using the payoff you were given for it, in your own natural spoken voice — not a dry restatement.
+
+- IDENTIFY narration: clearly state what the painting is, who painted it, roughly when, and a hook that promises a hidden layer about to be discovered.
+- CONTEXT narration: the bigger picture — what scene/moment this is, why it was painted, historical/cultural context. Scene-setting, not a detail zoom.
+- Each reveal narration: ONE to THREE short sentences, must stand alone as a natural spoken chunk (no "as we discussed before" type references).
+- CLOSE narration: pull back out, tie the hidden meanings together into one closing thought, then (only if it fits naturally) a light non-salesy nudge like "next time you see a painting, look for what it's not saying out loud."
+- Only state facts you're reasonably confident about from the given metadata, the payoffs you were given, or well-established uncontroversial art history; flag genuine scholarly debate rather than asserting it as settled fact; never invent anecdotes.
+- Tone: curious, a little conspiratorial — like a knowledgeable friend leaning in to tell you a secret hiding in plain sight, not a dry textbook or museum placard. Short punchy sentences. Rhetorical questions sparingly.
+- Narration total length across IDENTIFY + CONTEXT + every reveal + CLOSE: roughly 170-230 words total (this becomes ~70-95 seconds of spoken narration) regardless of how many reveal details there are — do not go far outside this range.
+- Write a scroll-stopping YouTube Shorts title (under 90 characters) that promises a hidden meaning or secret, names the painting and/or artist, and creates real curiosity, without being clickbait-dishonest.
+- Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting "Public domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.", then a few relevant hashtags.
+- Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art movement/period, and general art-content discovery terms.
+
+You must respond by calling the "submit_narration" tool exactly once.`;
+
+  const body = {
+    model: model || DEFAULT_MODEL,
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: imageMediaType,
+              data: imageBufferForVision.toString('base64'),
+            },
+          },
+          {
+            type: 'text',
+            text: `Here is the painting's museum metadata:\n\n${metadataBlock}\n\nHere are the hidden details a human editor already selected for this video (do not change their regions — just write narration for them and put them in a good order):\n\n${detailsBlock}\n\nWrite the narration now.`,
+          },
+        ],
+      },
+    ],
+    tools: [
+      {
+        name: 'submit_narration',
+        description: 'Submit narration, ordering, and YouTube metadata for the pre-selected hidden details.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            youtube: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                tags: { type: 'array', items: { type: 'string' }, minItems: 8, maxItems: 15 },
+              },
+              required: ['title', 'description', 'tags'],
+            },
+            identifyNarration: { type: 'string' },
+            contextNarration: { type: 'string' },
+            reveals: {
+              type: 'array',
+              description: 'Every given detail id, exactly once each, in the chosen storytelling order, with its narration.',
+              minItems: selectedDetails.length,
+              maxItems: selectedDetails.length,
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  narration: { type: 'string' },
+                },
+                required: ['id', 'narration'],
+              },
+            },
+            closeNarration: { type: 'string' },
+          },
+          required: ['youtube', 'identifyNarration', 'contextNarration', 'reveals', 'closeNarration'],
+        },
+      },
+    ],
+    tool_choice: { type: 'tool', name: 'submit_narration' },
+  };
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Claude 대본(선택된 디테일) API 호출 실패 (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+  const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_narration');
+  if (!toolUse) {
+    throw new Error('Claude 응답에서 submit_narration tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
+  }
+
+  const result = toolUse.input;
+
+  // Claude가 id를 빠뜨리거나 중복 반환해도 죽지 않도록 방어적으로 재구성합니다 — 주어진
+  // selectedDetails 전부가, 정확히 한 번씩, 최종 segments에 반영되는 것을 보장합니다.
+  const byId = new Map(selectedDetails.map((d) => [d.id, d]));
+  const seen = new Set();
+  const reveals = [];
+  for (const r of Array.isArray(result.reveals) ? result.reveals : []) {
+    if (byId.has(r.id) && !seen.has(r.id) && typeof r.narration === 'string' && r.narration.trim()) {
+      reveals.push({ detail: byId.get(r.id), narration: r.narration.trim() });
+      seen.add(r.id);
+    }
+  }
+  for (const d of selectedDetails) {
+    if (!seen.has(d.id)) {
+      console.warn(`[anthropic]   Claude가 detail id "${d.id}"의 narration을 빠뜨려 teaser로 대체합니다.`);
+      reveals.push({ detail: d, narration: d.teaser });
+      seen.add(d.id);
+    }
+  }
+
+  const fullImageBbox = { x: 0, y: 0, w: 1, h: 1 };
+  const segments = [
+    { narration: result.identifyNarration, focus: '그림 전체 소개', gridPosition: 'full image', bbox: { ...fullImageBbox } },
+    { narration: result.contextNarration, focus: '배경/맥락 설명', gridPosition: 'full image', bbox: { ...fullImageBbox } },
+    ...reveals.map(({ detail, narration }) => ({
+      narration,
+      focus: detail.focus,
+      gridPosition: detail.gridPosition,
+      bbox: { ...detail.bbox },
+    })),
+    { narration: result.closeNarration, focus: '마무리', gridPosition: 'full image', bbox: { ...fullImageBbox } },
+  ];
+
+  return { youtube: result.youtube, segments };
+}
+
 /**
  * Claude(vision)에게 실제 그림 이미지 + 메타데이터를 보여주고, 숏폼 영상 대본을 받아옵니다.
  *
@@ -131,27 +444,45 @@ export async function evaluatePaintingSuitability({ imageBufferForVision, imageM
  * @param {string} [imagePath] - imageBufferForVision과 같은 이미지가 저장된 파일 경로.
  *   있으면 대본 생성 후 각 구간의 bbox가 실제로 의도한 디테일을 보여주는지 crop해서
  *   재확인하는 2차 검증을 수행합니다 (없으면 검증을 건너뜁니다).
+ * @param {Array<{id,focus,gridPosition,bbox,teaser}>} [selectedDetails] - 사람이 미리
+ *   generateHiddenDetailCandidates()의 결과 중에서 고른 디테일들. 주어지면 Claude는 이
+ *   디테일 자체를 새로 고르지 않고, 순서/나레이션/YouTube 메타데이터만 작성합니다
+ *   (generateNarrationForSelectedDetails 참고). 생략하면 기존처럼 Claude가 디테일까지
+ *   전부 자유롭게 고릅니다(자동 실행 파이프라인이 쓰는 경로).
  */
-export async function generateVideoScript({ painting, imageBufferForVision, imagePath, imageMediaType, apiKey, model }) {
+export async function generateVideoScript({ painting, imageBufferForVision, imagePath, imageMediaType, apiKey, model, selectedDetails }) {
   apiKey = apiKey?.trim();
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY가 설정되어 있지 않습니다. GitHub Actions Secret 또는 로컬 .env를 확인하세요.');
   }
 
-  const metadataBlock = [
-    `Title: ${painting.title}`,
-    `Artist: ${painting.artistDisplayName || 'Unknown'}`,
-    painting.artistDisplayBio ? `Artist bio: ${painting.artistDisplayBio}` : null,
-    `Date: ${painting.objectDate || 'Unknown'}`,
-    `Medium: ${painting.medium || 'Unknown'}`,
-    painting.culture ? `Culture: ${painting.culture}` : null,
-    painting.department ? `Department: ${painting.department}` : null,
-    painting.creditLine ? `Credit line: ${painting.creditLine}` : null,
-    painting.dimensions ? `Dimensions: ${painting.dimensions}` : null,
-    `Source: The Metropolitan Museum of Art, object #${painting.objectID}, ${painting.objectURL}`,
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const metadataBlock = buildMetadataBlock(painting);
+
+  // 리뷰 화면에서 사람이 이미 후보 디테일 중 몇 개를 골라둔 경우(selectedDetails), 그
+  // 디테일들의 focus/gridPosition/bbox는 이미 확정된 것으로 두고, 나레이션 작성과
+  // 순서 배치만 별도 함수에 맡깁니다 — 아래 자유 선택 경로(포맷에 맞춰 Claude가 디테일
+  // 자체도 직접 고르는 기존 방식)와는 완전히 다른 프롬프트/스키마를 씁니다.
+  if (selectedDetails && selectedDetails.length > 0) {
+    const script = await generateNarrationForSelectedDetails({
+      painting,
+      imageBufferForVision,
+      imageMediaType,
+      apiKey,
+      model,
+      metadataBlock,
+      selectedDetails,
+    });
+
+    validateAndClampScript(script);
+    for (const seg of script.segments) {
+      reconcileBboxWithGridPosition(seg);
+    }
+    if (imagePath) {
+      console.log('[anthropic] 각 구간의 확대 위치(bbox)가 실제로 맞는 디테일을 보여주는지 검증 중...');
+      await verifyAndFixBboxes({ script, imagePath, imageMediaType, apiKey, model });
+    }
+    return script;
+  }
 
   const systemPrompt = `You are a scriptwriter for a YouTube Shorts channel that decodes the HIDDEN MEANINGS inside famous public-domain paintings — symbols, secrets, jokes, political messages, and psychological details that most viewers would walk right past — similar in spirit to popular Instagram art-explainer accounts, but written to be read aloud as narration over a video.
 
