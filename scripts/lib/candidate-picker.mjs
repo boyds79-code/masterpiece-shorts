@@ -331,8 +331,8 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
         (c.recommended ? '<span class="badge">Claude 추천</span>' : '') +
         '</div>' +
         '<div class="teaser"></div>';
-      body.querySelector('.focus').textContent = c.focus;
-      body.querySelector('.teaser').textContent = c.teaser;
+      body.querySelector('.focus').textContent = c.focusKo || c.focus;
+      body.querySelector('.teaser').textContent = c.teaserKo || c.teaser;
 
       div.appendChild(checkbox);
       div.appendChild(body);

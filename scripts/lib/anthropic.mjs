@@ -151,6 +151,8 @@ For each candidate:
 - "gridPosition": mentally divide the image into a 3x3 grid (top/middle/bottom x left/center/right) and name the cell(s) containing the detail. Do this BEFORE picking bbox numbers.
 - "bbox": fractions 0.0-1.0 of the full image (x,y = top-left corner, w,h = width/height). Constraints: 0<=x, 0<=y, x+w<=1, y+h<=1, w>=0.12, h>=0.12 (never absurdly tiny). Double-check it's actually consistent with the gridPosition you named.
 - "teaser": 1-3 sentences written FOR THE CREATOR who is deciding whether to include this in the video — explain what the detail is AND its actual interpretive payoff, so they can judge real interest without having to guess what you meant.
+- "focusKo": a natural Korean translation of "focus" (same short label, in Korean) — the creator screening these options reads Korean.
+- "teaserKo": a natural, fluent Korean translation of "teaser" conveying the exact same content and payoff — NOT a stiff word-for-word translation. This is shown ONLY on the screening screen; the final video narration stays in English regardless of what the creator picks.
 - "recommended": true for the details you would personally pick first if you could only choose five — your best, most surprising, most confidently-sourced ones.
 
 You must respond by calling "submit_candidates" exactly once.`;
@@ -161,7 +163,7 @@ You must respond by calling "submit_candidates" exactly once.`;
  * 대본(나레이션 확정)을 만듭니다 — 두 단계로 나눈 이유는 review-editor.mjs의 안내를
  * 참고하세요.
  *
- * @returns {Promise<{ candidates: Array<{id,focus,gridPosition,bbox,teaser,recommended}> }>}
+ * @returns {Promise<{ candidates: Array<{id,focus,focusKo,gridPosition,bbox,teaser,teaserKo,recommended}> }>}
  */
 export async function generateHiddenDetailCandidates({ painting, imageBufferForVision, imageMediaType, apiKey, model }) {
   apiKey = apiKey?.trim();
@@ -209,6 +211,7 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
                 type: 'object',
                 properties: {
                   focus: { type: 'string' },
+                  focusKo: { type: 'string', description: 'Natural Korean translation of focus, for the screening screen.' },
                   gridPosition: { type: 'string' },
                   bbox: {
                     type: 'object',
@@ -221,9 +224,10 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
                     required: ['x', 'y', 'w', 'h'],
                   },
                   teaser: { type: 'string' },
+                  teaserKo: { type: 'string', description: 'Natural, fluent Korean translation of teaser, for the screening screen.' },
                   recommended: { type: 'boolean' },
                 },
-                required: ['focus', 'gridPosition', 'bbox', 'teaser', 'recommended'],
+                required: ['focus', 'focusKo', 'gridPosition', 'bbox', 'teaser', 'teaserKo', 'recommended'],
               },
             },
           },
@@ -259,9 +263,11 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
     const candidate = {
       id: `d${i + 1}`,
       focus: c.focus,
+      focusKo: c.focusKo || c.focus,
       gridPosition: c.gridPosition,
       bbox: clampBbox(c.bbox),
       teaser: c.teaser,
+      teaserKo: c.teaserKo || c.teaser,
       recommended: !!c.recommended,
     };
     reconcileBboxWithGridPosition(candidate); // bbox가 gridPosition 라벨과 어긋나면 여기서 바로 보정
