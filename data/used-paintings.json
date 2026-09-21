@@ -669,10 +669,18 @@
     "usedAt": "2026-09-20T14:45:45.803Z",
     "videoIdMeaning": "gOBwncKoAE4"
   },
-  {    "objectID": 39888,
+  {
+    "objectID": 39888,
     "title": "Wild geese descending to sandbar",
     "artistDisplayName": "Unidentified artist",
     "usedAt": "2026-09-20T16:54:19.807Z",
     "videoIdProcess": "_KyoQBq7GnE"
+  },
+  {
+    "objectID": 437654,
+    "title": "Circus Sideshow (Parade de cirque)",
+    "artistDisplayName": "Georges Seurat",
+    "usedAt": "2026-09-21T06:16:44.896Z",
+    "videoIdProcess": "eV6xM8tOmcM"
   }
 ]

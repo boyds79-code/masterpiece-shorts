@@ -38,3 +38,4 @@
 | 2026-09-19 | The Repast of the Lion | Henri Rousseau (le Douanier) | [FJV9GbB35L4](https://studio.youtube.com/video/FJV9GbB35L4/edit) |
 | 2026-09-20 | Joseph-Antoine Moltedo (born 1775) | Jean Auguste Dominique Ingres | [qGFP3R-3WsA](https://studio.youtube.com/video/qGFP3R-3WsA/edit) |
 | 2026-09-20 | Wild geese descending to sandbar | Unidentified artist | [_KyoQBq7GnE](https://studio.youtube.com/video/_KyoQBq7GnE/edit) |
+| 2026-09-21 | Circus Sideshow (Parade de cirque) | Georges Seurat | [eV6xM8tOmcM](https://studio.youtube.com/video/eV6xM8tOmcM/edit) |
