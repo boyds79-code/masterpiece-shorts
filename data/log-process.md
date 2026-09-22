@@ -40,3 +40,4 @@
 | 2026-09-20 | Wild geese descending to sandbar | Unidentified artist | [_KyoQBq7GnE](https://studio.youtube.com/video/_KyoQBq7GnE/edit) |
 | 2026-09-21 | Circus Sideshow (Parade de cirque) | Georges Seurat | [eV6xM8tOmcM](https://studio.youtube.com/video/eV6xM8tOmcM/edit) |
 | 2026-09-21 | The Dream of the Shepherd (Der Traum des Hirten) | Ferdinand Hodler | [0tQy5rrHHlI](https://studio.youtube.com/video/0tQy5rrHHlI/edit) |
+| 2026-09-22 | Aristotle with a Bust of Homer | Rembrandt (Rembrandt van Rijn) | [duXmgX9Rn3k](https://studio.youtube.com/video/duXmgX9Rn3k/edit) |
