@@ -12,6 +12,48 @@ export const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
 const MIN_SIZE = 0.12;
 
+// Anthropic API 호출 공통 함수. 일시적인 문제(네트워크 끊김 — "fetch failed"/EPIPE/ECONNRESET,
+// 429 레이트리밋, 5xx/529 과부하)는 잠깐 기다렸다가 자동으로 다시 시도합니다. 이런 일시적
+// 오류 때문에 그림 고르기부터 전체 실행이 통째로 멈추는 일을 막기 위함입니다. 재시도해도
+// 안 되거나 재시도할 의미가 없는 오류(400/401/403 등)는 기존과 같은 형식의 에러를 던집니다.
+const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504, 529]);
+const MAX_API_ATTEMPTS = 4;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function callClaude(body, apiKey, { label = 'Claude API' } = {}) {
+  for (let attempt = 1; attempt <= MAX_API_ATTEMPTS; attempt++) {
+    const wait = 2000 * 2 ** (attempt - 1); // 2초, 4초, 8초
+    let res;
+    try {
+      res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      if (attempt < MAX_API_ATTEMPTS) {
+        console.warn(`[anthropic]   ${label} 네트워크 오류(${err.cause?.code || err.message}), ${wait / 1000}초 후 재시도 (${attempt}/${MAX_API_ATTEMPTS - 1})...`);
+        await sleep(wait);
+        continue;
+      }
+      throw err;
+    }
+    if (res.ok) return res.json();
+
+    const text = await res.text();
+    if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_API_ATTEMPTS) {
+      console.warn(`[anthropic]   ${label} 일시 오류(${res.status}), ${wait / 1000}초 후 재시도 (${attempt}/${MAX_API_ATTEMPTS - 1})...`);
+      await sleep(wait);
+      continue;
+    }
+    throw new Error(`${label} 호출 실패 (${res.status}): ${text}`);
+  }
+}
+
 // Claude가 지시를 완벽히 안 지켰을 경우를 대비한 안전장치 — bbox를 이미지 범위 안으로
 // clamp하고, 너무 작은 crop을 최소 크기로 보정합니다. (ffmpeg 단계에서 이상한 값으로
 // 죽는 것보다 여기서 미리 방어하는 게 낫습니다.)
@@ -21,6 +63,101 @@ export function clampBbox(b) {
   const x = Math.max(0, Math.min(1 - w, b.x));
   const y = Math.max(0, Math.min(1 - h, b.y));
   return { x, y, w, h };
+}
+
+// Claude가 tool 입력의 중첩 필드(youtube 객체, reveals/segments 배열 등)를 가끔 객체가
+// 아니라 JSON "문자열"로 감싸서 돌려줍니다. 그런 경우 여기서 다시 파싱합니다. 파싱이
+// 안 되면 원래 값을 그대로 돌려줍니다.
+export function parseIfJsonString(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+// 그림 제목을 바탕으로 "페인트 바이 넘버 키트" 검색 결과 페이지로 가는 Amazon
+// 제휴(Associates) 링크를 만듭니다. 특정 상품(ASIN)을 매번 자동으로 정확히 찾아 붙이는
+// 건 기술적으로 불가능합니다 — Amazon 상품 페이지는 robots.txt로 자동 스크래핑이
+// 막혀 있고, 공식 Product Advertising API는 어소시에이트 계정에 유효 판매 3건이 쌓이기
+// 전엔 발급되지 않습니다. 그래서 특정 상품 링크 대신, 그림 제목으로 바로 검색되는
+// Amazon 검색결과 페이지에 내 태그를 붙이는 방식을 씁니다 — 스크래핑/API 없이 그림
+// 제목만으로 항상 만들 수 있고, 실제 매칭 상품이 있으면 시청자가 검색결과에서 바로
+// 찾을 수 있습니다. AMAZON_ASSOCIATE_TAG가 .env에 없으면 조용히 빈 문자열을 반환해서
+// (어필리에이트 계정이 없던 과거 영상들처럼) 아무 영향 없이 넘어갑니다.
+export function buildAffiliateBlock(painting) {
+  const tag = process.env.AMAZON_ASSOCIATE_TAG?.trim();
+  if (!tag) return '';
+  const paintingTitle = painting?.title || '';
+  if (!paintingTitle) return '';
+
+  const query = encodeURIComponent(`${paintingTitle} paint by numbers kit`);
+  const link = `https://www.amazon.com/s?k=${query}&tag=${tag}`;
+
+  return `🎨 Want to paint this yourself? Browse paint-by-numbers kits inspired by this piece: ${link}\n(As an Amazon Associate I earn from qualifying purchases.)`;
+}
+
+// YouTube 메타데이터(title/description/tags)를 업로드 가능한 형태로 정규화합니다.
+// - 문자열로 온 경우 JSON.parse를 시도하고, 설명 안의 이스케이프 안 된 따옴표(예:
+//   painting "Broken Eggs") 때문에 파싱이 깨지면 필드별로 직접 추출합니다.
+// - 제목이 비면 그림 제목/작가로 대체하고, YouTube 제한(제목 100자, < > 금지)에 맞춥니다.
+// - 어필리에이트 태그가 설정돼 있으면, FTC/유튜브 고지 규정(모바일 기준 "더보기" 없이
+//   보이는 영역, 대략 첫 3줄 안에 고지문이 있어야 함)에 맞춰 설명 맨 앞에 고지문+링크를
+//   붙입니다. 본문 내용이 길든 짧든 항상 맨 위에 오도록 해서 이 규정을 만족시킵니다.
+// 대본 단계에서 여기서 바로잡아 두면, TTS/영상 조립까지 다 끝난 뒤 업로드 단계에서
+// "Cannot read properties of undefined" 같은 오류로 죽는 일을 막을 수 있습니다.
+export function normalizeYoutube(raw, painting, { fallbackTitle } = {}) {
+  let y = parseIfJsonString(raw);
+
+  if (typeof y === 'string') {
+    const s = y;
+    const unescape = (t) => (t == null ? t : t.replace(/\\n/g, '\n').replace(/\\"/g, '"'));
+    const title = s.match(/"title"\s*:\s*"([\s\S]*?)"\s*,\s*"description"/)?.[1];
+    const description = s.match(/"description"\s*:\s*"([\s\S]*?)"\s*,\s*"tags"/)?.[1];
+    let tags = [];
+    try {
+      tags = JSON.parse(s.match(/"tags"\s*:\s*(\[[\s\S]*?\])/)?.[1] ?? '[]');
+    } catch {
+      tags = [];
+    }
+    y = { title: unescape(title), description: unescape(description), tags };
+    console.warn('[anthropic]   youtube 메타데이터가 깨진 JSON 문자열로 와서 필드별로 복구했습니다.');
+  }
+
+  if (!y || typeof y !== 'object' || Array.isArray(y)) y = {};
+
+  const clean = (t) => String(t ?? '').replace(/[<>]/g, '').trim();
+  const paintingTitle = painting?.title || 'This Painting';
+  const artist = painting?.artistDisplayName;
+
+  let title = clean(y.title);
+  if (!title) {
+    title = clean(fallbackTitle || `The Hidden Meaning of ${paintingTitle}${artist ? ` (${artist})` : ''}`);
+    console.warn(`[anthropic]   YouTube 제목이 비어 있어 기본 제목으로 대체합니다: "${title}"`);
+  }
+  if (title.length > 100) title = title.slice(0, 97).trimEnd() + '...';
+
+  let description = clean(y.description);
+  if (!description) {
+    description = clean(
+      `${paintingTitle}${artist ? ` by ${artist}` : ''} — the hidden meanings most viewers miss.\n\nPublic domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.`
+    );
+  }
+
+  const affiliateBlock = buildAffiliateBlock(painting);
+  if (affiliateBlock && !description.includes('As an Amazon Associate')) {
+    description = `${affiliateBlock}\n\n${description}`;
+  }
+
+  let tags = parseIfJsonString(y.tags);
+  if (!Array.isArray(tags)) tags = [];
+  tags = tags
+    .filter((t) => typeof t === 'string')
+    .map((t) => clean(t).replace(/^#/, ''))
+    .filter(Boolean);
+
+  return { title, description, tags };
 }
 
 // 그림 후보 하나가 애초에 이 포맷(숨은 디테일 여러 개를 파고드는 영상)에 쓸 만한
@@ -92,22 +229,7 @@ export async function evaluatePaintingSuitability({ imageBufferForVision, imageM
     tool_choice: { type: 'tool', name: 'evaluate_suitability' },
   };
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude 적합성 판단 API 호출 실패 (${res.status}): ${text}`);
-  }
-
-  const data = await res.json();
+  const data = await callClaude(body, apiKey, { label: 'Claude 적합성 판단 API' });
   const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'evaluate_suitability');
   if (!toolUse) {
     throw new Error('적합성 판단 응답에서 evaluate_suitability tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
@@ -175,7 +297,7 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
 
   const body = {
     model: model || DEFAULT_MODEL,
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: CANDIDATE_DETAILS_SYSTEM_PROMPT,
     messages: [
       {
@@ -238,34 +360,37 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
     tool_choice: { type: 'tool', name: 'submit_candidates' },
   };
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
+  // 후보 10개 + 한국어 번역까지 쓰다 보면 응답이 길어져 중간에 잘리거나(max_tokens),
+  // candidates가 빠진 채로 오는 경우가 있습니다. 그럴 땐 한 번 더 요청하고, 그래도 안 되면
+  // CONTENT_REFUSAL로 표시해 이 그림만 건너뛰고 다른 그림으로 넘어가게 합니다 (전체 실행을
+  // 멈추지 않도록).
+  const MAX_CANDIDATE_ATTEMPTS = 2;
+  let rawCandidates;
+  let lastProblem = '';
+  for (let attempt = 1; attempt <= MAX_CANDIDATE_ATTEMPTS; attempt++) {
+    const data = await callClaude(body, apiKey, { label: 'Claude 후보 디테일 API' });
+    const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_candidates');
+    // candidates 배열이 문자열로 감싸져 오는 경우도 방어합니다.
+    rawCandidates = parseIfJsonString(toolUse?.input?.candidates);
+    if (Array.isArray(rawCandidates) && rawCandidates.length > 0) break;
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude 후보 디테일 API 호출 실패 (${res.status}): ${text}`);
+    lastProblem = !toolUse
+      ? 'submit_candidates tool 호출 없음'
+      : `candidates가 배열이 아님 (stop_reason: ${data.stop_reason}, 받은 키: ${Object.keys(toolUse.input || {}).join(', ') || '없음'})`;
+    console.warn(`[anthropic]   후보 디테일 응답이 비정상입니다 (${lastProblem}) — ${attempt < MAX_CANDIDATE_ATTEMPTS ? '다시 요청합니다.' : '이 그림은 건너뜁니다.'}`);
+    rawCandidates = undefined;
+  }
+  if (!Array.isArray(rawCandidates)) {
+    throw Object.assign(new Error(`Claude가 후보 디테일을 제대로 반환하지 않았습니다: ${lastProblem}`), { code: 'CONTENT_REFUSAL' });
   }
 
-  const data = await res.json();
-  const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_candidates');
-  if (!toolUse) {
-    throw new Error('Claude 응답에서 submit_candidates tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
-  }
-
-  const candidates = toolUse.input.candidates.map((c, i) => {
+  const candidates = rawCandidates.map((c, i) => {
     const candidate = {
       id: `d${i + 1}`,
       focus: c.focus,
       focusKo: c.focusKo || c.focus,
       gridPosition: c.gridPosition,
-      bbox: clampBbox(c.bbox),
+      bbox: clampBbox(parseIfJsonString(c.bbox)),
       teaser: c.teaser,
       teaserKo: c.teaserKo || c.teaser,
       recommended: !!c.recommended,
@@ -310,12 +435,13 @@ THE MOST IMPORTANT RULE — avoid flat description: never just describe what a d
 - Write a scroll-stopping YouTube Shorts title (under 90 characters) that promises a hidden meaning or secret, names the painting and/or artist, and creates real curiosity, without being clickbait-dishonest.
 - Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting "Public domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.", then a few relevant hashtags.
 - Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art movement/period, and general art-content discovery terms.
+- The "youtube" field must be a JSON object with title/description/tags fields, not a string.
 
 You must respond by calling the "submit_narration" tool exactly once.`;
 
   const body = {
     model: model || DEFAULT_MODEL,
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: systemPrompt,
     messages: [
       {
@@ -377,28 +503,15 @@ You must respond by calling the "submit_narration" tool exactly once.`;
     tool_choice: { type: 'tool', name: 'submit_narration' },
   };
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude 대본(선택된 디테일) API 호출 실패 (${res.status}): ${text}`);
-  }
-
-  const data = await res.json();
+  const data = await callClaude(body, apiKey, { label: 'Claude 대본(선택된 디테일) API' });
   const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_narration');
   if (!toolUse) {
     throw new Error('Claude 응답에서 submit_narration tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
   }
 
   const result = toolUse.input;
+  // reveals 배열이 문자열로 감싸져 오는 경우 — 파싱해서 정상 경로로 처리합니다.
+  result.reveals = parseIfJsonString(result.reveals);
 
   // Claude가 id를 빠뜨리거나 중복 반환해도 죽지 않도록 방어적으로 재구성합니다 — 주어진
   // selectedDetails 전부가, 정확히 한 번씩, 최종 segments에 반영되는 것을 보장합니다.
@@ -406,7 +519,7 @@ You must respond by calling the "submit_narration" tool exactly once.`;
   const seen = new Set();
   const reveals = [];
   for (const r of Array.isArray(result.reveals) ? result.reveals : []) {
-    if (byId.has(r.id) && !seen.has(r.id) && typeof r.narration === 'string' && r.narration.trim()) {
+    if (r && byId.has(r.id) && !seen.has(r.id) && typeof r.narration === 'string' && r.narration.trim()) {
       reveals.push({ detail: byId.get(r.id), narration: r.narration.trim() });
       seen.add(r.id);
     }
@@ -432,7 +545,7 @@ You must respond by calling the "submit_narration" tool exactly once.`;
     { narration: result.closeNarration, focus: '마무리', gridPosition: 'full image', bbox: { ...fullImageBbox } },
   ];
 
-  return { youtube: result.youtube, segments };
+  return { youtube: normalizeYoutube(result.youtube, painting), segments };
 }
 
 /**
@@ -499,7 +612,7 @@ THE MOST IMPORTANT RULE — avoid flat description: Never just describe what a d
 Structure the script as 7 to 10 segments, in exactly this order:
 1. IDENTIFY (bbox = the whole painting): Open by clearly stating what the painting is, who painted it, and roughly when — e.g. "This is [Title], painted by [Artist] around [year]." Immediately follow with a hook that promises a hidden layer the viewer is about to discover (never just a flat ID with no hook attached).
 2. CONTEXT (bbox = the whole painting or very close to it): Explain the bigger picture — what scene or moment is depicted, why the artist painted it, who it was made for, or what historical/cultural moment it belongs to. This is scene-setting, not a detail zoom yet.
-3 through N-1. REVEAL (bbox = one specific real detail each): Each segment zooms into ONE real visible detail and decodes its hidden meaning — a symbol, a piece of iconography, an expression that reveals emotion or intent, a technical trick, a detail that was controversial or surprising for its time, something the artist hid as commentary or a personal signature. Vary what kind of detail you pick (don't do five faces in a row) and favor the most genuinely surprising or little-known facts you can respons­ibly attribute to this specific work.
+3 through N-1. REVEAL (bbox = one specific real detail each): Each segment zooms into ONE real visible detail and decodes its hidden meaning — a symbol, a piece of iconography, an expression that reveals emotion or intent, a technical trick, a detail that was controversial or surprising for its time, something the artist hid as commentary or a personal signature. Vary what kind of detail you pick (don't do five faces in a row) and favor the most genuinely surprising or little-known facts you can responsibly attribute to this specific work.
 Last segment. CLOSE (bbox = the whole painting again): Pull back out and tie the hidden meanings together into one closing thought that reframes the whole painting — then, only if it fits naturally, a light non-salesy nudge like "next time you see a painting, look for what it's not saying out loud."
 - Only state facts you're reasonably confident about from the given metadata or well-established, uncontroversial art history. If something is debated or uncertain among art historians, say so ("some art historians believe...", "it's long been debated whether...") rather than asserting it as settled fact. Never invent specific anecdotes, quotes, or events not supported by the metadata or common knowledge about the work — an interesting TRUE detail beats an invented dramatic one every time.
 - Tone: curious, a little conspiratorial — like a knowledgeable friend leaning in to tell you a secret hiding in plain sight, not a dry textbook or museum placard. Short punchy sentences. Rhetorical questions ("Notice anything strange about his hands?") are a good tool before a reveal, used sparingly.
@@ -511,12 +624,13 @@ Last segment. CLOSE (bbox = the whole painting again): Pull back out and tie the
 - Write a scroll-stopping YouTube Shorts title (under 90 characters) that promises a hidden meaning or secret, names the painting and/or artist, and creates real curiosity, without being clickbait-dishonest.
 - Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting "Public domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.", then a few relevant hashtags.
 - Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art movement/period, and general art-content discovery terms (e.g. "art history", "hidden meaning", "famous paintings", "art explained").
+- The "youtube" field must be a JSON object with title/description/tags fields, and "segments" must be a JSON array — never a string.
 
 You must respond by calling the "submit_script" tool exactly once.`;
 
   const body = {
     model: model || DEFAULT_MODEL,
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: systemPrompt,
     messages: [
       {
@@ -585,28 +699,22 @@ You must respond by calling the "submit_script" tool exactly once.`;
     tool_choice: { type: 'tool', name: 'submit_script' },
   };
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude API 호출 실패 (${res.status}): ${text}`);
-  }
-
-  const data = await res.json();
+  const data = await callClaude(body, apiKey, { label: 'Claude API' });
   const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_script');
   if (!toolUse) {
     throw new Error('Claude 응답에서 submit_script tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
   }
 
   const script = toolUse.input;
+  // 중첩 필드가 문자열로 감싸져 오는 경우를 먼저 바로잡습니다.
+  script.segments = parseIfJsonString(script.segments);
+  if (Array.isArray(script.segments)) {
+    for (const seg of script.segments) {
+      if (seg && seg.bbox) seg.bbox = parseIfJsonString(seg.bbox);
+    }
+  }
+  script.youtube = normalizeYoutube(script.youtube, painting);
+
   validateAndClampScript(script);
 
   for (const seg of script.segments) {
@@ -766,29 +874,14 @@ async function verifyAndFixBboxes({ script, imagePath, imageMediaType, apiKey, m
           tool_choice: { type: 'tool', name: 'confirm_or_fix_bbox' },
         };
 
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`bbox 검증 API 호출 실패 (${res.status}): ${text}`);
-        }
-
-        const data = await res.json();
+        const data = await callClaude(body, apiKey, { label: 'bbox 검증 API' });
         const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'confirm_or_fix_bbox');
         if (!toolUse) {
           throw new Error('검증 응답에서 confirm_or_fix_bbox tool 호출을 찾지 못했습니다.');
         }
 
         const result = toolUse.input;
-        const fixed = clampBbox(result.bbox);
+        const fixed = clampBbox(parseIfJsonString(result.bbox));
 
         if (result.matches !== false) {
           seg.bbox = fixed;
