@@ -1,4 +1,12 @@
-import { API_URL, DEFAULT_MODEL, clampBbox, isNearFullImageBbox, reconcileBboxWithGridPosition } from './anthropic.mjs';
+import {
+  callClaude,
+  DEFAULT_MODEL,
+  clampBbox,
+  isNearFullImageBbox,
+  reconcileBboxWithGridPosition,
+  parseIfJsonString,
+  normalizeYoutube,
+} from './anthropic.mjs';
 
 // "스케치"/"밑칠"/"마무리 직전" 각 단계마다 하나의 정적 이미지만 오래 보여주면 "스케치에서
 // 바로 완성 직전으로 점프하는" 느낌이 듭니다 — 더 타임랩스처럼 보이도록, 각 단계마다
@@ -95,6 +103,7 @@ Tone: curious and speculative but confident in craft knowledge — like a painte
 - Write a scroll-stopping YouTube Shorts title (under 80 characters — a fixed disclosure suffix will be appended by our system, so leave room) that promises to reveal how the painting might have been made, naming the painting and/or artist.
 - Write a YouTube description: 2-4 sentences about the painting and what the imagined process reconstruction shows, written in a way that is honest this is a speculative recreation.
 - Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art technique terms (e.g. "underpainting", "art process", "painting technique", the actual movement name), and general discovery terms (e.g. "art history", "how paintings are made", "famous paintings").
+- The "youtube" field must be a JSON object with title/description/tags fields, and "segments", "steps", and "bbox" must be real JSON arrays/objects — never strings.
 
 You must respond by calling the "submit_process_script" tool exactly once.`;
 
@@ -181,28 +190,28 @@ You must respond by calling the "submit_process_script" tool exactly once.`;
     tool_choice: { type: 'tool', name: 'submit_process_script' },
   };
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude API 호출 실패 (${res.status}): ${text}`);
-  }
-
-  const data = await res.json();
+  const data = await callClaude(body, apiKey, { label: 'Claude API' });
   const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_process_script');
   if (!toolUse) {
     throw new Error('Claude 응답에서 submit_process_script tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
   }
 
   const script = toolUse.input;
+  // Claude가 중첩 필드를 가끔 JSON "문자열"로 감싸서 돌려줍니다 (예: 설명 안의 이스케이프 안 된
+  // 따옴표 때문에 youtube 전체가 문자열이 되는 경우). 검증 전에 먼저 바로잡습니다.
+  script.segments = parseIfJsonString(script.segments);
+  if (Array.isArray(script.segments)) {
+    for (const seg of script.segments) {
+      if (!seg || typeof seg !== 'object') continue;
+      seg.usesGeneratedImage = parseIfJsonString(seg.usesGeneratedImage);
+      if (seg.steps !== undefined) seg.steps = parseIfJsonString(seg.steps);
+      if (seg.bbox !== undefined) seg.bbox = parseIfJsonString(seg.bbox);
+    }
+  }
+  script.youtube = normalizeYoutube(script.youtube, painting, {
+    fallbackTitle: `How ${painting?.title || 'This Painting'} Was Painted`,
+  });
+
   validateAndClampProcessScript(script);
   return script;
 }

@@ -1,4 +1,12 @@
-import { API_URL, DEFAULT_MODEL, clampBbox, isNearFullImageBbox, reconcileBboxWithGridPosition } from './anthropic.mjs';
+import {
+  callClaude,
+  DEFAULT_MODEL,
+  clampBbox,
+  isNearFullImageBbox,
+  reconcileBboxWithGridPosition,
+  parseIfJsonString,
+  normalizeYoutube,
+} from './anthropic.mjs';
 import { PROCESS_STEPS_PER_STAGE } from './process-script.mjs';
 
 /**
@@ -91,6 +99,7 @@ You must also write YOUTUBE METADATA for three separate outputs, since the same 
 - "meaningTeaser": a short, hook-driven YouTube Shorts title (under 80 characters) that promises a hidden secret/symbol inside this painting — this is a short excerpt covering only the hidden-meaning reveals, not the painting technique.
 For processTeaser and meaningTeaser, also write a short 1-2 sentence description of just that clip's own content (our system will automatically append a fixed note pointing viewers to the full video — do not write that note yourself).
 All three need "tags": 8-15 relevant lowercase YouTube tags (no # symbol) mixing the artist name, painting name, art technique/movement terms, and general discovery terms (e.g. "art history", "famous paintings").
+The "youtube" field (and each of full/processTeaser/meaningTeaser inside it) must be a JSON object, and "segments", "steps", and "bbox" must be real JSON arrays/objects — never strings.
 
 You must respond by calling the "submit_longform_script" tool exactly once.`;
 
@@ -201,30 +210,69 @@ You must respond by calling the "submit_longform_script" tool exactly once.`;
     tool_choice: { type: 'tool', name: 'submit_longform_script' },
   };
 
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude API 호출 실패 (${res.status}): ${text}`);
-  }
-
-  const data = await res.json();
+  const data = await callClaude(body, apiKey, { label: 'Claude API' });
   const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_longform_script');
   if (!toolUse) {
     throw new Error('Claude 응답에서 submit_longform_script tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
   }
 
   const script = toolUse.input;
+  // Claude가 중첩 필드를 가끔 JSON "문자열"로 감싸서 돌려줍니다 (예: 설명 안의 이스케이프 안 된
+  // 따옴표 때문에 youtube 전체가 문자열이 되는 경우). 검증 전에 먼저 바로잡습니다.
+  script.segments = parseIfJsonString(script.segments);
+  if (Array.isArray(script.segments)) {
+    for (const seg of script.segments) {
+      if (!seg || typeof seg !== 'object') continue;
+      seg.usesGeneratedImage = parseIfJsonString(seg.usesGeneratedImage);
+      if (seg.steps !== undefined) seg.steps = parseIfJsonString(seg.steps);
+      if (seg.bbox !== undefined) seg.bbox = parseIfJsonString(seg.bbox);
+    }
+  }
+  script.youtube = normalizeLongformYoutube(script.youtube, painting);
+
   validateAndClampLongformScript(script);
   return script;
+}
+
+// youtube = { full, processTeaser, meaningTeaser } 세 블록을 각각 업로드 가능한 형태로
+// 정규화합니다. youtube 전체가 깨진 JSON 문자열로 온 경우에는 세 키의 위치를 기준으로
+// 문자열을 잘라서 블록별로 normalizeYoutube()에 넘깁니다 (그 함수가 title/description/tags를
+// 필드별로 복구합니다). 제목이 비면 블록 성격에 맞는 기본 제목으로 대체합니다 — 특히 full의
+// 제목은 티저 아웃트로 카드에 그대로 박히므로 절대 비어 있으면 안 됩니다.
+const LONGFORM_YOUTUBE_KEYS = ['full', 'processTeaser', 'meaningTeaser'];
+
+function normalizeLongformYoutube(raw, painting) {
+  let y = parseIfJsonString(raw);
+
+  if (typeof y === 'string') {
+    const s = y;
+    const positions = LONGFORM_YOUTUBE_KEYS.map((k) => ({ k, i: s.search(new RegExp(`"${k}"\\s*:`)) }))
+      .filter((p) => p.i >= 0)
+      .sort((a, b) => a.i - b.i);
+    y = {};
+    positions.forEach((p, n) => {
+      y[p.k] = s.slice(p.i, n + 1 < positions.length ? positions[n + 1].i : s.length);
+    });
+    console.warn('[longform-script]   youtube 메타데이터가 문자열로 와서 블록별로 복구했습니다.');
+  }
+
+  if (!y || typeof y !== 'object' || Array.isArray(y)) y = {};
+
+  const paintingTitle = painting?.title || 'This Painting';
+  const artist = painting?.artistDisplayName;
+  const byArtist = artist ? ` by ${artist}` : '';
+
+  return {
+    full: normalizeYoutube(y.full, painting, {
+      fallbackTitle: `${paintingTitle}${byArtist}: How It Was Painted and What It Hides`,
+    }),
+    processTeaser: normalizeYoutube(y.processTeaser, painting, {
+      fallbackTitle: `How ${paintingTitle} Was Painted`,
+    }),
+    meaningTeaser: normalizeYoutube(y.meaningTeaser, painting, {
+      fallbackTitle: `The Hidden Meaning of ${paintingTitle}`,
+    }),
+  };
 }
 
 const EXPECTED_STAGE_ORDER = [

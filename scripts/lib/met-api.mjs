@@ -17,11 +17,73 @@ const REGIONS = {
   eastern: { departmentIds: [6], departmentNames: ['Asian Art'], weight: 1 },
 };
 
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Met API 요청 실패 (${res.status}): ${url}`);
+// Met API는 짧은 시간에 요청이 몰리면 그 IP를 한동안 403으로 차단합니다. 차단된 상태에서
+// 계속 다음 작품을 조회하면 403만 수십 번 쌓이면서 차단이 더 길어질 수 있어서, 아래 세 가지로
+// 막습니다:
+// 1. 모든 요청에 User-Agent를 붙여 봇으로 오인될 가능성을 줄입니다.
+// 2. 요청 사이에 최소 간격(MIN_REQUEST_INTERVAL_MS)을 둬서 한꺼번에 몰리지 않게 합니다.
+// 3. 403이 MAX_CONSECUTIVE_403번 연속으로 나오면 "차단 중"으로 보고 즉시 멈춥니다.
+// 429/5xx나 일시적인 네트워크 끊김은 잠깐 기다렸다가 다시 시도합니다.
+const USER_AGENT = 'Mozilla/5.0 (compatible; masterpiece-shorts/1.0; art-history video project)';
+const MIN_REQUEST_INTERVAL_MS = 300;
+const MAX_CONSECUTIVE_403 = 3;
+const MAX_ATTEMPTS = 3;
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let lastRequestAt = 0;
+let consecutive403 = 0;
+
+async function throttledFetch(url) {
+  const waitMs = lastRequestAt + MIN_REQUEST_INTERVAL_MS - Date.now();
+  if (waitMs > 0) await sleep(waitMs);
+  lastRequestAt = Date.now();
+  return fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json, image/*;q=0.9, */*;q=0.8' } });
+}
+
+async function metFetch(url, label = 'Met API 요청') {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const backoff = 2000 * 2 ** (attempt - 1); // 2초, 4초
+    let res;
+    try {
+      res = await throttledFetch(url);
+    } catch (err) {
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(`[met-api] 네트워크 오류(${err.cause?.code || err.message}), ${backoff / 1000}초 후 재시도...`);
+        await sleep(backoff);
+        continue;
+      }
+      throw err;
+    }
+
+    if (res.status === 403) {
+      consecutive403++;
+      if (consecutive403 >= MAX_CONSECUTIVE_403) {
+        throw Object.assign(
+          new Error(
+            `Met API가 ${consecutive403}번 연속으로 403(접근 거부)을 반환했습니다 — 요청이 몰려 일시적으로 차단된 상태로 보입니다. ` +
+              '더 요청하면 차단이 길어질 수 있어 여기서 멈춥니다. 30분~몇 시간 뒤에 다시 실행하거나, 다른 네트워크(휴대폰 핫스팟 등)에서 실행하세요.'
+          ),
+          { code: 'MET_BLOCKED' }
+        );
+      }
+      throw new Error(`${label} 실패 (403): ${url}`);
+    }
+    consecutive403 = 0;
+
+    if (res.ok) return res;
+
+    if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
+      console.warn(`[met-api] 일시 오류(${res.status}), ${backoff / 1000}초 후 재시도...`);
+      await sleep(backoff);
+      continue;
+    }
+    throw new Error(`${label} 실패 (${res.status}): ${url}`);
   }
+}
+
+async function fetchJson(url) {
+  const res = await metFetch(url);
   return res.json();
 }
 
@@ -81,8 +143,7 @@ export function isUsable(obj) {
 }
 
 export async function downloadImage(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`이미지 다운로드 실패 (${res.status}): ${url}`);
+  const res = await metFetch(url, '이미지 다운로드');
   const arrayBuffer = await res.arrayBuffer();
   return Buffer.from(arrayBuffer);
 }
@@ -126,6 +187,7 @@ export async function pickUnusedPainting(usedIds) {
       try {
         obj = await getObject(id);
       } catch (err) {
+        if (err.code === 'MET_BLOCKED') throw err; // 차단 중이면 더 두드리지 않고 바로 멈춤
         console.warn(`[met-api] objectID ${id} 조회 실패, 건너뜀:`, err.message);
         continue;
       }

@@ -61,3 +61,22 @@
 | 2026-09-19 | The Love Song | Sir Edward Burne-Jones | [G3Hs8oZMVh4](https://studio.youtube.com/video/G3Hs8oZMVh4/edit) |
 | 2026-09-20 | The Triumph of Fame; (reverse) Impresa of the Medici Family and Arms of the Medici and Tornabuoni Families | Giovanni di ser Giovanni Guidi (called Scheggia) | [ahjce_JqgQk](https://studio.youtube.com/video/ahjce_JqgQk/edit) |
 | 2026-09-20 | Clothing the Naked | Michiel Sweerts | [gOBwncKoAE4](https://studio.youtube.com/video/gOBwncKoAE4/edit) |
+| 2026-09-20 | Joan of Arc | Jules Bastien-Lepage | [Yeo157iNnMI](https://studio.youtube.com/video/Yeo157iNnMI/edit) |
+| 2026-09-21 | Manuel Osorio Manrique de Zuñiga (1784–1792) | Goya (Francisco de Goya y Lucientes) | [pyGwbXvqcVo](https://studio.youtube.com/video/pyGwbXvqcVo/edit) |
+| 2026-09-21 | The Young Virgin | Francisco de Zurbarán | [Zyl9jKIFLDk](https://studio.youtube.com/video/Zyl9jKIFLDk/edit) |
+| 2026-09-22 | Rubens, Helena Fourment (1614–1673), and Their Son Frans (1633–1678) | Peter Paul Rubens | [bkSwAsxC6Bs](https://studio.youtube.com/video/bkSwAsxC6Bs/edit) |
+| 2026-09-22 | Self-Portrait with Two Pupils, Marie Gabrielle Capet (1761–1818) and Marie Marguerite Carraux de Rosemond (1765–1788) | Adélaïde Labille-Guiard | [m7tjwUIxIKQ](https://studio.youtube.com/video/m7tjwUIxIKQ/edit) |
+| 2026-09-22 | The Crucifixion with the Virgin and Saint John | Hendrick ter Brugghen | [tt0a1OWGTHw](https://studio.youtube.com/video/tt0a1OWGTHw/edit) |
+| 2026-09-23 | A Bouquet of Flowers | Clara Peeters | [hGLMlmQ3YVA](https://studio.youtube.com/video/hGLMlmQ3YVA/edit) |
+| 2026-09-23 | Lute Player | Valentin de Boulogne | [dvJAQ_jrNiU](https://studio.youtube.com/video/dvJAQ_jrNiU/edit) |
+| 2026-09-23 | Antoine Laurent Lavoisier (1743–1794) and Marie Anne Lavoisier (Marie Anne Pierrette Paulze, 1758–1836) | Jacques Louis David | [iK-yMhjo5_M](https://studio.youtube.com/video/iK-yMhjo5_M/edit) |
+| 2026-09-23 | Circus Sideshow (Parade de cirque) | Georges Seurat | [jU1OIPv3Nuk](https://studio.youtube.com/video/jU1OIPv3Nuk/edit) |
+| 2026-09-23 | Cardinal Fernando Niño de Guevara (1541–1609) | El Greco (Domenikos Theotokopoulos) | [_Nk-eMEdzyg](https://studio.youtube.com/video/_Nk-eMEdzyg/edit) |
+| 2026-09-24 | Piazza San Marco | Canaletto (Giovanni Antonio Canal) | [s_OK_rwOmBE](https://studio.youtube.com/video/s_OK_rwOmBE/edit) |
+| 2026-09-24 | Captain George K. H. Coussmaker (1759–1801) | Sir Joshua Reynolds | [niSM4efw9y8](https://studio.youtube.com/video/niSM4efw9y8/edit) |
+| 2026-09-24 | Portrait of a Young Man | Bronzino (Agnolo di Cosimo di Mariano) | [uChlgNySoMU](https://studio.youtube.com/video/uChlgNySoMU/edit) |
+| 2026-09-24 | Young Woman with a Water Pitcher | Johannes Vermeer | [r424BuhDlTo](https://studio.youtube.com/video/r424BuhDlTo/edit) |
+| 2026-09-24 | The Baptism of Christ | Jacopo Bassano (Jacopo da Ponte) | [vA-QzSssTDk](https://studio.youtube.com/video/vA-QzSssTDk/edit) |
+| 2026-09-24 | Marie Emilie Coignet de Courson (1716–1806) with a Dog | Jean Honoré Fragonard | [hzyN8LwQ6Co](https://studio.youtube.com/video/hzyN8LwQ6Co/edit) |
+| 2026-09-24 | The Immaculate Conception | Guido Reni | [WdUTvtsWf-c](https://studio.youtube.com/video/WdUTvtsWf-c/edit) |
+| 2026-09-25 | Wheat Field with Cypresses | Vincent van Gogh | [yJ7NPl5z5Mo](https://studio.youtube.com/video/yJ7NPl5z5Mo/edit) |
