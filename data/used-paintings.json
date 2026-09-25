@@ -669,10 +669,267 @@
     "usedAt": "2026-09-20T14:45:45.803Z",
     "videoIdMeaning": "gOBwncKoAE4"
   },
-  {    "objectID": 39888,
+  {
+    "objectID": 39888,
     "title": "Wild geese descending to sandbar",
     "artistDisplayName": "Unidentified artist",
     "usedAt": "2026-09-20T16:54:19.807Z",
     "videoIdProcess": "_KyoQBq7GnE"
+  },
+  {
+    "objectID": 441769,
+    "title": "Virgil's Tomb by Moonlight, with Silius Italicus Declaiming",
+    "artistDisplayName": "Joseph Wright (Wright of Derby)",
+    "skippedAt": "2026-09-20T20:00:33.828Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is a romantic landscape painting featuring ancient ruins with dramatic lighting. While atmospheric and beautifully composed, it lacks the density of discoverable symbolic content needed for the format. There is only one small, barely visible human figure seated in the illu"
+  },
+  {
+    "objectID": 436504,
+    "title": "The Adoration of the Magi",
+    "artistDisplayName": "Giotto di Bondone",
+    "reservedAt": "2026-09-20T20:01:33.789Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 435621,
+    "title": "Joan of Arc",
+    "artistDisplayName": "Jules Bastien-Lepage",
+    "usedAt": "2026-09-20T20:23:17.994Z",
+    "videoIdMeaning": "Yeo157iNnMI"
+  },
+  {
+    "objectID": 437654,
+    "title": "Circus Sideshow (Parade de cirque)",
+    "artistDisplayName": "Georges Seurat",
+    "usedAt": "2026-09-21T06:16:44.896Z",
+    "videoIdProcess": "eV6xM8tOmcM"
+  },
+  {
+    "objectID": 436545,
+    "title": "Manuel Osorio Manrique de Zuñiga (1784–1792)",
+    "artistDisplayName": "Goya (Francisco de Goya y Lucientes)",
+    "usedAt": "2026-09-21T14:24:42.953Z",
+    "videoIdMeaning": "pyGwbXvqcVo"
+  },
+  {
+    "objectID": 437971,
+    "title": "The Young Virgin",
+    "artistDisplayName": "Francisco de Zurbarán",
+    "usedAt": "2026-09-21T14:38:03.192Z",
+    "videoIdMeaning": "Zyl9jKIFLDk"
+  },
+  {
+    "objectID": 39901,
+    "title": "Night-Shining White",
+    "artistDisplayName": "Han Gan",
+    "skippedAt": "2026-09-21T14:41:36.114Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is a classical Chinese painting depicting a single camel with minimal background elements. While the painting features numerous collector's seals (red stamps) and calligraphic inscriptions, these are later additions by collectors/owners rather than original compositional e"
+  },
+  {
+    "objectID": 437790,
+    "title": "Allegory of the Planets and Continents",
+    "artistDisplayName": "Giovanni Battista Tiepolo",
+    "reservedAt": "2026-09-21T14:42:46.168Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 634108,
+    "title": "The Dream of the Shepherd (Der Traum des Hirten)",
+    "artistDisplayName": "Ferdinand Hodler",
+    "usedAt": "2026-09-21T18:44:52.693Z",
+    "videoIdProcess": "0tQy5rrHHlI"
+  },
+  {
+    "objectID": 437532,
+    "title": "Rubens, Helena Fourment (1614–1673), and Their Son Frans (1633–1678)",
+    "artistDisplayName": "Peter Paul Rubens",
+    "usedAt": "2026-09-22T15:12:31.050Z",
+    "videoIdMeaning": "bkSwAsxC6Bs"
+  },
+  {
+    "objectID": 436840,
+    "title": "Self-Portrait with Two Pupils, Marie Gabrielle Capet (1761–1818) and Marie Marguerite Carraux de Rosemond (1765–1788)",
+    "artistDisplayName": "Adélaïde Labille-Guiard",
+    "usedAt": "2026-09-22T15:31:24.723Z",
+    "videoIdMeaning": "m7tjwUIxIKQ"
+  },
+  {
+    "objectID": 435817,
+    "title": "The Crucifixion with the Virgin and Saint John",
+    "artistDisplayName": "Hendrick ter Brugghen",
+    "usedAt": "2026-09-22T15:47:54.061Z",
+    "videoIdMeaning": "tt0a1OWGTHw"
+  },
+  {
+    "objectID": 437394,
+    "title": "Aristotle with a Bust of Homer",
+    "artistDisplayName": "Rembrandt (Rembrandt van Rijn)",
+    "usedAt": "2026-09-22T17:43:49.009Z",
+    "videoIdProcess": "duXmgX9Rn3k"
+  },
+  {
+    "objectID": 827660,
+    "title": "A Bouquet of Flowers",
+    "artistDisplayName": "Clara Peeters",
+    "usedAt": "2026-09-23T01:11:49.991Z",
+    "videoIdMeaning": "hGLMlmQ3YVA"
+  },
+  {
+    "objectID": 439933,
+    "title": "Lute Player",
+    "artistDisplayName": "Valentin de Boulogne",
+    "usedAt": "2026-09-23T01:30:29.543Z",
+    "videoIdMeaning": "dvJAQ_jrNiU"
+  },
+  {
+    "objectID": 39668,
+    "title": "Old Trees, Level Distance",
+    "artistDisplayName": "Guo Xi",
+    "reservedAt": "2026-09-23T01:33:42.305Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 436579,
+    "title": "Broken Eggs",
+    "artistDisplayName": "Jean-Baptiste Greuze",
+    "reservedAt": "2026-09-23T01:37:17.810Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 435876,
+    "title": "Madame Cézanne (Hortense Fiquet, 1850–1922) in a Red Dress",
+    "artistDisplayName": "Paul Cézanne",
+    "reservedAt": "2026-09-23T02:56:07.384Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 40055,
+    "title": "Emperor Xuanzong's flight to Shu",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-23T03:00:59.565Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 40447,
+    "title": "Grapevine and Squirrels",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-23T03:07:08.676Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 438816,
+    "title": "The Forest in Winter at Sunset",
+    "artistDisplayName": "Théodore Rousseau",
+    "skippedAt": "2026-09-23T12:49:57.412Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 0] This is a dark, atmospheric landscape painting of a forest scene with bare or autumn trees. While moody and evocative, it contains no visible human or animal figures, no narrative action, and no discernible symbolic objects to decode. It's essentially a pure landscape - trees, "
+  },
+  {
+    "objectID": 436106,
+    "title": "Antoine Laurent Lavoisier (1743–1794) and Marie Anne Lavoisier (Marie Anne Pierrette Paulze, 1758–1836)",
+    "artistDisplayName": "Jacques Louis David",
+    "usedAt": "2026-09-23T13:56:17.239Z",
+    "videoIdMeaning": "iK-yMhjo5_M"
+  },
+  {
+    "objectID": 437654,
+    "title": "Circus Sideshow (Parade de cirque)",
+    "artistDisplayName": "Georges Seurat",
+    "usedAt": "2026-09-23T15:42:56.428Z",
+    "videoIdMeaning": "jU1OIPv3Nuk"
+  },
+  {
+    "objectID": 436575,
+    "title": "View of Toledo",
+    "artistDisplayName": "El Greco (Domenikos Theotokopoulos)",
+    "reservedAt": "2026-09-23T15:49:17.914Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 436573,
+    "title": "Cardinal Fernando Niño de Guevara (1541–1609)",
+    "artistDisplayName": "El Greco (Domenikos Theotokopoulos)",
+    "usedAt": "2026-09-23T16:11:58.241Z",
+    "videoIdMeaning": "_Nk-eMEdzyg"
+  },
+  {
+    "objectID": 435839,
+    "title": "Piazza San Marco",
+    "artistDisplayName": "Canaletto (Giovanni Antonio Canal)",
+    "usedAt": "2026-09-24T06:34:03.558Z",
+    "videoIdMeaning": "s_OK_rwOmBE"
+  },
+  {
+    "objectID": 437447,
+    "title": "Captain George K. H. Coussmaker (1759–1801)",
+    "artistDisplayName": "Sir Joshua Reynolds",
+    "usedAt": "2026-09-24T10:24:01.281Z",
+    "videoIdMeaning": "niSM4efw9y8"
+  },
+  {
+    "objectID": 435802,
+    "title": "Portrait of a Young Man",
+    "artistDisplayName": "Bronzino (Agnolo di Cosimo di Mariano)",
+    "usedAt": "2026-09-24T10:43:11.393Z",
+    "videoIdMeaning": "uChlgNySoMU"
+  },
+  {
+    "objectID": 437881,
+    "title": "Young Woman with a Water Pitcher",
+    "artistDisplayName": "Johannes Vermeer",
+    "usedAt": "2026-09-24T15:10:26.544Z",
+    "videoIdMeaning": "r424BuhDlTo"
+  },
+  {
+    "objectID": 440393,
+    "title": "The Baptism of Christ",
+    "artistDisplayName": "Jacopo Bassano (Jacopo da Ponte)",
+    "usedAt": "2026-09-24T15:45:17.266Z",
+    "videoIdMeaning": "vA-QzSssTDk"
+  },
+  {
+    "objectID": 74813,
+    "title": "Shakyamuni triad",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-24T16:10:08.068Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 437299,
+    "title": "Jalais Hill, Pontoise",
+    "artistDisplayName": "Camille Pissarro",
+    "skippedAt": "2026-09-24T16:10:43.019Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is a landscape painting showing a rural French countryside scene with rolling hills, fields, trees, and buildings in the distance. While it contains one small figure (a woman walking along a path in the lower right), the painting is primarily a landscape composition. Thoug"
+  },
+  {
+    "objectID": 436323,
+    "title": "Marie Emilie Coignet de Courson (1716–1806) with a Dog",
+    "artistDisplayName": "Jean Honoré Fragonard",
+    "usedAt": "2026-09-24T16:25:09.281Z",
+    "videoIdMeaning": "hzyN8LwQ6Co"
+  },
+  {
+    "objectID": 437423,
+    "title": "The Immaculate Conception",
+    "artistDisplayName": "Guido Reni",
+    "usedAt": "2026-09-24T23:49:44.968Z",
+    "videoIdMeaning": "WdUTvtsWf-c"
+  },
+  {
+    "objectID": 656430,
+    "title": "Portrait of Yun Dongseom (1710–1795)",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-24T23:52:02.591Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 436535,
+    "title": "Wheat Field with Cypresses",
+    "artistDisplayName": "Vincent van Gogh",
+    "usedAt": "2026-09-25T00:05:45.166Z",
+    "videoIdMeaning": "yJ7NPl5z5Mo"
   }
 ]
