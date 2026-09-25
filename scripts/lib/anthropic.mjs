@@ -77,34 +77,10 @@ export function parseIfJsonString(value) {
   }
 }
 
-// 그림 제목을 바탕으로 "페인트 바이 넘버 키트" 검색 결과 페이지로 가는 Amazon
-// 제휴(Associates) 링크를 만듭니다. 특정 상품(ASIN)을 매번 자동으로 정확히 찾아 붙이는
-// 건 기술적으로 불가능합니다 — Amazon 상품 페이지는 robots.txt로 자동 스크래핑이
-// 막혀 있고, 공식 Product Advertising API는 어소시에이트 계정에 유효 판매 3건이 쌓이기
-// 전엔 발급되지 않습니다. 그래서 특정 상품 링크 대신, 그림 제목으로 바로 검색되는
-// Amazon 검색결과 페이지에 내 태그를 붙이는 방식을 씁니다 — 스크래핑/API 없이 그림
-// 제목만으로 항상 만들 수 있고, 실제 매칭 상품이 있으면 시청자가 검색결과에서 바로
-// 찾을 수 있습니다. AMAZON_ASSOCIATE_TAG가 .env에 없으면 조용히 빈 문자열을 반환해서
-// (어필리에이트 계정이 없던 과거 영상들처럼) 아무 영향 없이 넘어갑니다.
-export function buildAffiliateBlock(painting) {
-  const tag = process.env.AMAZON_ASSOCIATE_TAG?.trim();
-  if (!tag) return '';
-  const paintingTitle = painting?.title || '';
-  if (!paintingTitle) return '';
-
-  const query = encodeURIComponent(`${paintingTitle} paint by numbers kit`);
-  const link = `https://www.amazon.com/s?k=${query}&tag=${tag}`;
-
-  return `🎨 Want to paint this yourself? Browse paint-by-numbers kits inspired by this piece: ${link}\n(As an Amazon Associate I earn from qualifying purchases.)`;
-}
-
 // YouTube 메타데이터(title/description/tags)를 업로드 가능한 형태로 정규화합니다.
 // - 문자열로 온 경우 JSON.parse를 시도하고, 설명 안의 이스케이프 안 된 따옴표(예:
 //   painting "Broken Eggs") 때문에 파싱이 깨지면 필드별로 직접 추출합니다.
 // - 제목이 비면 그림 제목/작가로 대체하고, YouTube 제한(제목 100자, < > 금지)에 맞춥니다.
-// - 어필리에이트 태그가 설정돼 있으면, FTC/유튜브 고지 규정(모바일 기준 "더보기" 없이
-//   보이는 영역, 대략 첫 3줄 안에 고지문이 있어야 함)에 맞춰 설명 맨 앞에 고지문+링크를
-//   붙입니다. 본문 내용이 길든 짧든 항상 맨 위에 오도록 해서 이 규정을 만족시킵니다.
 // 대본 단계에서 여기서 바로잡아 두면, TTS/영상 조립까지 다 끝난 뒤 업로드 단계에서
 // "Cannot read properties of undefined" 같은 오류로 죽는 일을 막을 수 있습니다.
 export function normalizeYoutube(raw, painting, { fallbackTitle } = {}) {
@@ -143,11 +119,6 @@ export function normalizeYoutube(raw, painting, { fallbackTitle } = {}) {
     description = clean(
       `${paintingTitle}${artist ? ` by ${artist}` : ''} — the hidden meanings most viewers miss.\n\nPublic domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.`
     );
-  }
-
-  const affiliateBlock = buildAffiliateBlock(painting);
-  if (affiliateBlock && !description.includes('As an Amazon Associate')) {
-    description = `${affiliateBlock}\n\n${description}`;
   }
 
   let tags = parseIfJsonString(y.tags);
@@ -265,6 +236,8 @@ function buildMetadataBlock(painting) {
 const CANDIDATE_DETAILS_SYSTEM_PROMPT = `You are brainstorming candidate hidden-meaning "reveal" details for a YouTube Shorts video about a painting — for a human creator to screen BEFORE the final script is written. This is a menu of options, not the final narration, so each one must include the actual payoff (what it means / why it matters), not just a vague tease, so the human can judge genuine interest.
 
 You will be shown an actual photo of the painting, plus its museum metadata. Look closely at the image itself — real details you can actually see (facial expressions, gestures, hidden symbols, background elements, brushwork, light source, composition) — and propose details that are ACTUALLY visible, not generic art-history filler.
+
+Be especially careful with well-known religious/mythological/allegorical subjects that many different artists have painted (e.g. "Penitence of Saint Jerome", "Temptation of Saint Anthony", any saint with a traditional attribute animal or object). Do NOT assume a subject's textbook-standard iconography (a saint's usual companion animal, a symbolic object, a discarded item) appears in THIS specific painting just because it's traditional for that subject — different artists' depictions of the same theme often omit, relocate, or replace the standard elements. Verify every candidate against the actual pixels in front of you, not against your general knowledge of how that subject is "usually" painted.
 
 Propose 6 to 10 candidate details. Each one must be a single, specific, visually-locatable detail (never "the overall mood" or "the color palette as a whole") with a genuine interpretive payoff: what it symbolizes, what it reveals about the subject/artist/era, a secret or joke or warning it encodes, or why art historians find it significant. Avoid five variations on the same observation — vary what kind of detail you pick. Only propose things you're reasonably confident about from the given metadata or well-established, uncontroversial art history; flag genuine scholarly debate ("some art historians believe...") rather than asserting it as settled fact; never invent anecdotes unsupported by evidence.
 
