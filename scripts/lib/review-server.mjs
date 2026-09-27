@@ -28,11 +28,21 @@ import { clampBbox, generateVideoScript } from './anthropic.mjs';
 //   POST /confirm-candidates  고른 후보 디테일로 최종 대본(나레이션)을 생성 -> script.json 저장
 //   POST /save                 수정된 bbox를 script.json에 즉시 저장
 //   POST /build                 나레이션 생성 -> 영상 조립 -> YouTube 업로드까지 실행
+//   POST /reset-candidates      대본 확정을 취소하고 "숨은 이야기 고르기" 화면으로 되돌아감
+//                               (아래 "되돌아가기" 설명 참고)
+//
+// 되돌아가기: 대본(script.json)이 이미 만들어진 뒤에도, 확대 위치 검토 화면에서
+// "다시 고르기" 버튼을 누르면 이 POST /reset-candidates가 지금의 script.json을
+// script.previous.json으로 백업해두고 지웁니다 — candidates.json은 원래부터 그대로
+// 남아있으므로, 다음 GET /부터는 다시 "숨은 이야기 고르기" 화면이 뜹니다. 이때 직전에
+// 확정했던 script.previous.json을 읽어서 그때 골랐던 디테일들을 기본으로 다시
+// 체크해줘서, 처음부터 다시 고르지 않고 잘못 들어간 것만 바로 고칠 수 있게 합니다.
 
 export function startReviewServer({ reviewDir, imageFile = 'original.jpg' }) {
   const paintingPath = path.join(reviewDir, 'painting.json');
   const candidatesPath = path.join(reviewDir, 'candidates.json');
   const scriptPath = path.join(reviewDir, 'script.json');
+  const previousScriptPath = path.join(reviewDir, 'script.previous.json');
   const visionPath = path.join(reviewDir, 'vision.jpg');
   const imagePath = path.join(reviewDir, imageFile);
 
@@ -88,7 +98,24 @@ export function startReviewServer({ reviewDir, imageFile = 'original.jpg' }) {
             return;
           }
           const candidates = readJson(candidatesPath);
-          const html = buildCandidatePickerHtml({ painting, candidates, imageFile });
+          // "다시 고르기"로 되돌아온 경우, 직전에 확정했던 대본(script.previous.json)이
+          // 남아있으면 그때 골랐던 디테일들을 기본 체크로 미리 표시합니다 — focus 문구가
+          // candidates.json의 것과 그대로 같은 값이므로(generateNarrationForSelectedDetails가
+          // detail.focus를 그대로 복사해서 씀) 이걸로 역매칭합니다. 없으면(첫 실행) 기존처럼
+          // Claude가 추천한 것들을 기본으로 보여줍니다.
+          let previousFocuses = null;
+          if (fs.existsSync(previousScriptPath)) {
+            try {
+              const prev = readJson(previousScriptPath);
+              const fullNotes = new Set(['그림 전체 소개', '배경/맥락 설명', '마무리']);
+              previousFocuses = (prev.segments || [])
+                .map((s) => s.focus)
+                .filter((f) => typeof f === 'string' && f && !fullNotes.has(f));
+            } catch (err) {
+              console.warn('[review-server] script.previous.json을 읽지 못해 추천값으로 대체합니다:', err.message);
+            }
+          }
+          const html = buildCandidatePickerHtml({ painting, candidates, imageFile, previousFocuses });
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
           res.end(html);
           return;
@@ -183,6 +210,25 @@ export function startReviewServer({ reviewDir, imageFile = 'original.jpg' }) {
           if (seg.bboxTo) seg.bboxTo = clampBbox(seg.bboxTo);
         }
         fs.writeFileSync(scriptPath, JSON.stringify(updated, null, 2) + '\n');
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/reset-candidates') {
+        if (building || confirmingCandidates) {
+          sendJson(res, 409, { error: '지금 실행/생성 중이라 되돌릴 수 없습니다. 끝난 뒤 다시 시도해주세요.' });
+          return;
+        }
+        if (!fs.existsSync(candidatesPath)) {
+          sendJson(res, 410, { error: '후보 디테일 파일(candidates.json)을 찾을 수 없어 되돌릴 수 없습니다.' });
+          return;
+        }
+        if (fs.existsSync(scriptPath)) {
+          // 잘못 되돌렸을 때를 대비해 덮어쓰지 않고 직전 대본을 백업해둡니다 — 이 백업은
+          // 다음 "숨은 이야기 고르기" 화면에서 이전 선택을 기본 체크로 되살리는 데도 씁니다.
+          fs.copyFileSync(scriptPath, previousScriptPath);
+          fs.rmSync(scriptPath);
+        }
         sendJson(res, 200, { ok: true });
         return;
       }

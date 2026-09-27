@@ -187,6 +187,8 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
   button:disabled { opacity: 0.5; cursor: default; }
   #saveBtn { background: #eee; color: #333; }
   #saveBtn:hover:not(:disabled) { background: #e2e2e2; }
+  #resetBtn { background: #fff; color: #a5691a; border: 1px solid #e0c28a; }
+  #resetBtn:hover:not(:disabled) { background: #fdf3e3; }
   #buildBtn { background: #1f6f43; color: #fff; }
   #buildBtn:hover:not(:disabled) { background: #185735; }
   #status { font-size: 12.5px; color: #666; margin-left: 2px; }
@@ -234,6 +236,7 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
   <div class="sidebar">
     <div class="toolbar">
       <button id="saveBtn">저장</button>
+      <button id="resetBtn">디테일 다시 고르기</button>
       <button id="buildBtn">실행하기 (영상 만들기)</button>
       <span id="status"></span>
     </div>
@@ -277,6 +280,7 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
   const bannerEl = document.getElementById('banner');
   const logEl = document.getElementById('log');
   const saveBtn = document.getElementById('saveBtn');
+  const resetBtn = document.getElementById('resetBtn');
   const buildBtn = document.getElementById('buildBtn');
 
   // 박스 DOM 엘리먼트는 한 번만 만들고, 이후에는 스타일/텍스트만 갱신합니다 — 드래그 도중
@@ -658,6 +662,28 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
     }
   });
 
+  resetBtn.addEventListener('click', async () => {
+    const ok = window.confirm('지금 화면의 확대 위치 수정 내용은 사라지고, "숨은 이야기 고르기" 화면으로 돌아갑니다 (직전에 골랐던 디테일은 기본으로 다시 체크되어 있어요). 계속할까요?');
+    if (!ok) return;
+    resetBtn.disabled = true;
+    saveBtn.disabled = true;
+    buildBtn.disabled = true;
+    setStatus('되돌리는 중...');
+    try {
+      const res = await fetch('/reset-candidates', { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || ('되돌리기 실패 (' + res.status + ')'));
+      }
+      location.reload();
+    } catch (err) {
+      setStatus(err.message, 'err');
+      resetBtn.disabled = false;
+      saveBtn.disabled = false;
+      buildBtn.disabled = false;
+    }
+  });
+
   function showBanner(kind, html) {
     bannerEl.className = 'show ' + kind;
     bannerEl.innerHTML = html;
@@ -672,6 +698,7 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
   buildBtn.addEventListener('click', async () => {
     buildBtn.disabled = true;
     saveBtn.disabled = true;
+    resetBtn.disabled = true;
     setStatus('저장 후 실행합니다...');
     try {
       await doSave(); // 실행하기는 항상 최신 화면 상태를 먼저 저장한 뒤 그 파일로 빌드합니다.
@@ -687,6 +714,7 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
       setStatus(err.message, 'err');
       buildBtn.disabled = false;
       saveBtn.disabled = false;
+      resetBtn.disabled = false;
     }
   });
 
@@ -704,11 +732,13 @@ export function buildEditorHtml({ script, painting, imageFile = 'original.jpg' }
         '<br>잠시 후 이 화면의 서버가 종료됩니다 — 탭은 그냥 닫으셔도 됩니다.');
       buildBtn.disabled = true;
       saveBtn.disabled = true;
+      resetBtn.disabled = true;
     } else if (msg.type === 'error') {
       setStatus('실패', 'err');
       showBanner('err', '실행 중 오류가 발생했습니다: ' + escapeForHtml(msg.message));
       buildBtn.disabled = false;
       saveBtn.disabled = false;
+      resetBtn.disabled = false;
     }
   };
 

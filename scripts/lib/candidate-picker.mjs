@@ -13,12 +13,18 @@ const PALETTE = ['#e0554c', '#3f8ee0', '#e0a83f', '#7c4fe0', '#3fae7d', '#e0559c
  * @param {object} params.painting - Met API painting 객체
  * @param {{ candidates: Array<{id,focus,gridPosition,bbox,teaser,recommended}> }} params.candidates
  * @param {string} [params.imageFile]
+ * @param {string[]|null} [params.previousFocuses] - "다시 고르기"로 되돌아온 경우, 직전에
+ *   확정했던 대본에서 실제로 쓰인 디테일들의 focus 문구 목록. 있으면 이 목록과 focus가
+ *   일치하는 후보를 기본 체크로 표시합니다(추천값 대신). 없으면(첫 실행) 기존처럼
+ *   recommended만 기본 체크합니다.
  * @returns {string}
  */
-export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'original.jpg' }) {
+export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'original.jpg', previousFocuses = null }) {
   const list = candidates.candidates;
   const dataJson = JSON.stringify(list).replace(/</g, '\\u003c');
   const recommendedCount = list.filter((c) => c.recommended).length;
+  const isReset = Array.isArray(previousFocuses) && previousFocuses.length > 0;
+  const previousFocusesJson = JSON.stringify(isReset ? previousFocuses : []).replace(/</g, '\\u003c');
 
   return `<!doctype html>
 <html lang="ko">
@@ -229,7 +235,7 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
   </div>
   <div class="cards">
     <div class="guide">
-      <b>몇 개를 고르면 좋을까요?</b> 완성된 영상은 도입·맥락·마무리(고정 3구간) + 여기서 고른 디테일 개수로 구성되고, 전체 나레이션은 항상 약 170~230단어(70~95초) 안팎으로 맞춰집니다. 디테일을 너무 적게 고르면(1~2개) 밋밋하고, 너무 많이 고르면(8개 이상) 하나당 설명할 시간이 급격히 줄어들어요. <b>4~6개</b>를 추천하고, 3~7개면 무난합니다. Claude가 특히 강하다고 판단한 ${recommendedCount}개는 미리 체크해뒀어요 — 그대로 확인하셔도 되고 자유롭게 바꾸셔도 됩니다.
+      ${isReset ? '<b>직전에 확정했던 디테일들을 다시 체크해뒀어요.</b> 잘못 들어간 것만 체크 해제하고, 빠진 게 있으면 추가로 체크한 뒤 다시 확인을 눌러주세요.<br><br>' : ''}<b>몇 개를 고르면 좋을까요?</b> 완성된 영상은 도입·맥락·마무리(고정 3구간) + 여기서 고른 디테일 개수로 구성되고, 전체 나레이션은 항상 약 170~230단어(70~95초) 안팎으로 맞춰집니다. 디테일을 너무 적게 고르면(1~2개) 밋밋하고, 너무 많이 고르면(8개 이상) 하나당 설명할 시간이 급격히 줄어들어요. <b>4~6개</b>를 추천하고, 3~7개면 무난합니다. ${isReset ? '' : `Claude가 특히 강하다고 판단한 ${recommendedCount}개는 미리 체크해뒀어요 — 그대로 확인하셔도 되고 자유롭게 바꾸셔도 됩니다.`}
       <div class="counter-row">
         <span id="counter">0개 선택됨</span>
         <span id="counterNote" style="font-size:12.5px;color:#888;"></span>
@@ -246,9 +252,11 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
 </div>
 
 <script id="candidate-data" type="application/json">${dataJson}</script>
+<script id="previous-focuses-data" type="application/json">${previousFocusesJson}</script>
 <script>
 (function () {
   const CANDIDATES = JSON.parse(document.getElementById('candidate-data').textContent);
+  const PREVIOUS_FOCUSES = JSON.parse(document.getElementById('previous-focuses-data').textContent);
   const PALETTE = ${JSON.stringify(PALETTE)};
 
   const stage = document.getElementById('stage');
@@ -260,7 +268,12 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
   const bannerEl = document.getElementById('banner');
   const logEl = document.getElementById('log');
 
-  const selected = new Set(CANDIDATES.filter((c) => c.recommended).map((c) => c.id));
+  // "다시 고르기"로 되돌아온 경우 직전 선택(focus 문구로 역매칭)을 기본 체크로, 아니면
+  // 기존처럼 Claude 추천을 기본 체크로 표시합니다.
+  const previousFocusSet = new Set(PREVIOUS_FOCUSES);
+  const selected = previousFocusSet.size > 0
+    ? new Set(CANDIDATES.filter((c) => previousFocusSet.has(c.focus)).map((c) => c.id))
+    : new Set(CANDIDATES.filter((c) => c.recommended).map((c) => c.id));
   const markerEls = {}; // id -> element
   const cardEls = {}; // id -> element
 
