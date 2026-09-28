@@ -372,7 +372,126 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
     return candidate;
   });
 
-  return { candidates };
+  // 사람이 고르기 전에, 각 후보가 실제로 그림에 있는 디테일인지 한 번 더 검증합니다.
+  // 위 프롬프트에서 "텍스트북 도상학을 가정하지 말라"고 이미 지시했지만, 그것만으로는
+  // 표범/빨간 책처럼 그 주제에 흔히 곁들여지는 전통적 요소를 실제로 없는데도 있다고
+  // 착각하는 경우를 완전히 막지 못했습니다(실제로 겪은 사례). bbox를 크롭해서 다시
+  // 보여주고 "진짜 보이느냐"만 판정하게 하면, 이런 상상 속 디테일을 사람이 보기 전에
+  // 걸러낼 수 있습니다.
+  console.log(`[anthropic]   후보 디테일 ${candidates.length}개가 실제로 그림에 있는지 검증 중...`);
+  const verifiedCandidates = await verifyCandidateDetails({ candidates, imageBufferForVision, imageMediaType, apiKey, model });
+  console.log(`[anthropic]   검증 통과 ${verifiedCandidates.length}/${candidates.length}개`);
+
+  return { candidates: verifiedCandidates };
+}
+
+const VERIFY_CANDIDATE_SYSTEM_PROMPT = `You are fact-checking a list of candidate "hidden detail" ideas for a painting, before they are shown to a human to pick from. For each one, you'll see the full painting, then a cropped preview of the exact region proposed for that detail, along with the claimed focus/teaser text.
+
+Be strict and skeptical, especially for well-known religious/mythological/allegorical subjects that many different artists have painted with traditional, textbook iconography (a saint's usual companion animal, a symbolic object, a discarded item). A candidate idea may describe something that is traditional for the SUBJECT in general but is simply not present in THIS specific painting - that is exactly the mistake you're checking for. Judge only by the actual pixels in the crop (and, if needed, the full painting), never by what would be typical or expected for the subject.
+
+Reply "present": true only if the cropped region genuinely, unambiguously shows the described detail. Reply "present": false if the crop shows a different object, shows nothing resembling the description, or the described thing simply is not visible in the painting - even if it would be a traditional or expected element for this subject.
+
+You must respond by calling "confirm_candidate" exactly once.`;
+
+/**
+ * 후보 디테일 목록에서, 실제로 그림에 없는 것(모델이 그 주제의 "전형적인" 도상학을
+ * 이 그림에도 있다고 착각해서 지어낸 디테일)을 걸러냅니다. verifyAndFixBboxes()와 달리
+ * 여기서는 위치를 재조정하지 않고 - 애초에 그림에 없는 걸 다른 곳으로 옮겨봤자 여전히
+ * 없는 것이므로 - present:false로 판정된 후보를 통째로 제거합니다.
+ *
+ * 검증 API 호출 자체가 실패하면(네트워크/레이트리밋 등) 그 후보는 그냥 통과시킵니다 -
+ * 어차피 사람이 스크리닝 화면에서 한 번 더 보고 고르므로, 이 단계는 명백한 오류를
+ * 미리 줄이는 안전망이지 완벽한 보증이 아닙니다.
+ */
+async function verifyCandidateDetails({ candidates, imageBufferForVision, imageMediaType, apiKey, model }) {
+  if (candidates.length === 0) return candidates;
+
+  // cropStill()은 ffmpeg으로 파일 경로를 크롭하므로, 후보 생성에 쓴 이미지 버퍼를
+  // 임시 파일로 한 번 저장해두고 재사용합니다.
+  const tmpImagePath = path.join(os.tmpdir(), `candidate-verify-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+  fs.writeFileSync(tmpImagePath, imageBufferForVision);
+
+  const fullImageBase64 = imageBufferForVision.toString('base64');
+  const kept = [];
+  const dropped = [];
+
+  try {
+    const { width: imgWidth, height: imgHeight } = await getImageDimensions(tmpImagePath);
+
+    for (const candidate of candidates) {
+      const cropPath = path.join(os.tmpdir(), `candidate-crop-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`);
+      try {
+        await cropStill({ imagePath: tmpImagePath, bbox: candidate.bbox, imgWidth, imgHeight, outPath: cropPath });
+        const cropBase64 = fs.readFileSync(cropPath).toString('base64');
+
+        const body = {
+          model: model || DEFAULT_MODEL,
+          max_tokens: 512,
+          system: VERIFY_CANDIDATE_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Full painting, for reference:' },
+                { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: fullImageBase64 } },
+                {
+                  type: 'text',
+                  text: `Cropped preview proposed for this candidate detail. Focus: "${candidate.focus}". Teaser: "${candidate.teaser}"`,
+                },
+                { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: cropBase64 } },
+                { type: 'text', text: 'Is this candidate detail genuinely, visibly present in the crop?' },
+              ],
+            },
+          ],
+          tools: [
+            {
+              name: 'confirm_candidate',
+              description: 'Confirm whether the candidate detail is genuinely visible, or reject it as not actually present.',
+              input_schema: {
+                type: 'object',
+                properties: {
+                  present: { type: 'boolean' },
+                  reason: { type: 'string', description: 'One short sentence on what the crop actually shows, especially when present=false.' },
+                },
+                required: ['present'],
+              },
+            },
+          ],
+          tool_choice: { type: 'tool', name: 'confirm_candidate' },
+        };
+
+        const data = await callClaude(body, apiKey, { label: '후보 디테일 검증 API' });
+        const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'confirm_candidate');
+        if (!toolUse) throw new Error('검증 응답에서 confirm_candidate tool 호출을 찾지 못했습니다.');
+
+        if (toolUse.input.present === false) {
+          dropped.push({ candidate, reason: toolUse.input.reason || '(사유 없음)' });
+        } else {
+          kept.push(candidate);
+        }
+      } catch (err) {
+        console.warn(`[anthropic]   후보 검증 실패, 그대로 유지 ("${candidate.focus}"): ${err.message}`);
+        kept.push(candidate);
+      } finally {
+        fs.rmSync(cropPath, { force: true });
+      }
+    }
+  } finally {
+    fs.rmSync(tmpImagePath, { force: true });
+  }
+
+  for (const { candidate, reason } of dropped) {
+    console.log(`[anthropic]   후보 제외 (실제로 없는 디테일로 판정): "${candidate.focus}" - ${reason}`);
+  }
+
+  // 방어적으로: 검증 결과 전부 걸러져 후보가 하나도 안 남으면(극단적인 경우), 사람이
+  // 고를 것 자체가 없어지는 게 더 나쁘므로 원래 목록을 그대로 돌려줍니다.
+  if (kept.length === 0) {
+    console.warn('[anthropic]   후보 검증 후 남은 게 없어 원래 목록을 그대로 사용합니다.');
+    return candidates;
+  }
+
+  return kept;
 }
 
 /**
