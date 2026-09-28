@@ -15,6 +15,17 @@ const execFileAsync = promisify(execFile);
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
+// 영상 맨 앞 "숨은 이야기 훅" 몽타주(video-builder.mjs의 buildHookMontageClip 참고)에서
+// 한 번 읽히는 나레이션 문구. 그림마다 다르게 지어내지 않고 몇 가지 고정 문구 중 하나를
+// 무작위로 골라 쓰는 이유: (1) 매 영상마다 Claude를 한 번 더 호출할 필요가 없어 비용/실패
+// 지점이 늘지 않고, (2) 이 훅은 "이 그림 안에 확대해서 볼 지점들이 있다"는 사실 자체를
+// 알리는 범용 멘트라 그림별 맞춤 문구가 굳이 필요하지 않기 때문입니다.
+const HOOK_NARRATION_VARIANTS = [
+  "This painting is hiding secrets. Let's go find them.",
+  "There are hidden details buried in this painting. Let's take a closer look.",
+  "Hidden inside this painting are secrets most people miss. Let's dig in.",
+];
+
 // Claude에게 보여줄 이미지가 너무 크면(Met 원본은 수천 픽셀) API 제한/비용에 안 좋으니
 // 긴 변 기준 1568px로 줄인 사본을 별도로 만듭니다. 영상 제작에는 원본 그대로 씁니다.
 async function makeVisionCopy(originalPath, outPath) {
@@ -328,12 +339,25 @@ export async function buildAndUploadHiddenMeaningVideo({ painting, script, image
         console.log(`[generate-video]   세그먼트 ${i + 1}/${script.segments.length} 오디오 완료 (${durationSec.toFixed(1)}초)`);
       }
 
-      console.log('[generate-video] ffmpeg로 영상 조립 중 (줌/팬, 자막은 굽지 않고 SRT로 별도 생성, 썸네일 생성)...');
+      console.log('[generate-video] 영상 맨 앞에 붙일 훅 나레이션 오디오 생성 중 (Gemini TTS)...');
+      const hookText = HOOK_NARRATION_VARIANTS[Math.floor(Math.random() * HOOK_NARRATION_VARIANTS.length)];
+      const hookAudioPath = path.join(workDir, 'hook-audio.wav');
+      const { durationSec: hookDurationSec } = await generateNarrationAudio({
+        text: hookText,
+        apiKey: process.env.GEMINI_API_KEY,
+        model: process.env.GEMINI_TTS_MODEL,
+        voice: process.env.GEMINI_TTS_VOICE,
+        outPath: hookAudioPath,
+      });
+      console.log(`[generate-video]   훅 나레이션 오디오 완료 (${hookDurationSec.toFixed(1)}초): "${hookText}"`);
+
+      console.log('[generate-video] ffmpeg로 영상 조립 중 (훅 몽타주, 줌/팬, 자막은 굽지 않고 SRT로 별도 생성, 썸네일 생성)...');
       ({ finalPath: finalVideoPath, srtPath, thumbnailPath } = await assembleVideo({
         imagePath,
         segments: script.segments,
         painting,
         workDir: path.join(workDir, 'assembly'),
+        hook: { text: hookText, audioPath: hookAudioPath, durationSec: hookDurationSec },
       }));
       console.log(`[generate-video] 영상 완성: ${finalVideoPath}`);
 

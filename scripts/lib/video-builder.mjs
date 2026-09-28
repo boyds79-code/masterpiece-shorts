@@ -557,6 +557,19 @@ const AUDIO_CHANNELS = 2;
 // 계산 둘 다에서 이 값을 써서 서로 어긋나지 않게 합니다.
 const INTRO_DURATION_SEC = 2.5;
 
+// "숨은 이야기 훅" 몽타주(assembleVideo() 맨 앞, buildHookMontageClip() 참고) 설정값.
+// 사람이 고른 디테일(reveal 세그먼트)마다 짧게 휙휙 넘어가는 미리보기를 총
+// HOOK_TARGET_TOTAL_SEC초 안팎으로 맞추되, 디테일 개수가 아주 적거나 많을 때도 한 장면이
+// 너무 길게 늘어지거나(지루함) 너무 짧아 안 보이지(HOOK_MIN_SLICE_SEC 미만) 않도록
+// 장면당 길이를 이 범위 안으로 clamp합니다.
+const HOOK_TARGET_TOTAL_SEC = 10;
+const HOOK_MIN_SLICE_SEC = 1.2;
+const HOOK_MAX_SLICE_SEC = 2.5;
+// 장면이 넘어갈 때마다 넣는 "둥" 소리 하나의 길이(초). 실제 타악기 샘플 파일을 두는 대신
+// ffmpeg만으로 그때그때 합성합니다 — 라이선스/저작권 걱정 없이, 어떤 환경(로컬/GitHub
+// Actions)에서도 별도 에셋 파일 없이 항상 똑같이 재현됩니다.
+const HOOK_DRUM_DURATION_SEC = 0.35;
+
 function formatSrtTimestamp(totalSeconds) {
   const ms = Math.max(0, Math.round(totalSeconds * 1000));
   const h = Math.floor(ms / 3600000);
@@ -565,6 +578,10 @@ function formatSrtTimestamp(totalSeconds) {
   const msec = ms % 1000;
   const pad = (n, len = 2) => String(n).padStart(len, '0');
   return `${pad(h)}:${pad(m)}:${pad(s)},${pad(msec, 3)}`;
+}
+
+function buildSrtBlock(index, startSec, endSec, text) {
+  return `${index}\n${formatSrtTimestamp(startSec)} --> ${formatSrtTimestamp(endSec)}\n${wrapText(text, 42)}\n`;
 }
 
 /**
@@ -578,9 +595,115 @@ export function buildSrt(segments, introDurationSec = INTRO_DURATION_SEC) {
     const start = t;
     const end = t + seg.durationSec;
     t = end;
-    return `${i + 1}\n${formatSrtTimestamp(start)} --> ${formatSrtTimestamp(end)}\n${wrapText(seg.narration, 42)}\n`;
+    return buildSrtBlock(i + 1, start, end, seg.narration);
   });
   return blocks.join('\n');
+}
+
+/**
+ * 타악기 샘플 없이 ffmpeg 오디오 합성만으로 짧은 "둥" 타격음 하나를 만듭니다. 저음(85Hz)
+ * 사인파로 몸통(무게감)을, 그보다 짧게 감쇠하는 150Hz 사인파로 타격 순간의 존재감을 얹은
+ * 뒤 둘을 섞습니다 — 실제 킥드럼/전통 북 합성에서 흔히 쓰는 "저음 톤 + 빠른 지수 감쇠"
+ * 구조를 단순화한 버전입니다. anoisesrc처럼 덜 흔한 필터 대신 sine/afade/amix만 써서,
+ * 로컬(macOS)과 GitHub Actions(Ubuntu) 양쪽의 표준 ffmpeg 빌드에서 항상 동작하게 했습니다.
+ */
+async function buildDrumHit({ outPath }) {
+  const dur = HOOK_DRUM_DURATION_SEC;
+  await run('ffmpeg', [
+    '-y',
+    '-f', 'lavfi', '-i', `sine=frequency=85:duration=${dur}`,
+    '-f', 'lavfi', '-i', `sine=frequency=150:duration=${dur}`,
+    '-filter_complex', [
+      `[0:a]afade=t=out:st=0:d=${dur}:curve=exp,volume=1.0[low]`,
+      `[1:a]afade=t=out:st=0:d=${(dur * 0.5).toFixed(3)}:curve=exp,volume=0.5[hi]`,
+      `[low][hi]amix=inputs=2:duration=longest:dropout_transition=0,alimiter=limit=0.95[out]`,
+    ].join(';'),
+    '-map', '[out]',
+    '-ar', String(AUDIO_SAMPLE_RATE),
+    '-ac', String(AUDIO_CHANNELS),
+    outPath,
+  ]);
+  return outPath;
+}
+
+/**
+ * 영상 맨 앞에 붙는 "숨은 이야기 훅" 몽타주를 만듭니다. 사람이 고른 디테일(reveal
+ * 세그먼트, bbox가 전체 화면이 아닌 것들)의 확대 위치를 장면당 1.2~2.5초씩 휙휙 이어붙여
+ * 총 10초 안팎으로 보여주면서, 장면이 바뀔 때마다 buildDrumHit()의 "둥" 소리를 얹어
+ * 시선을 붙잡는 짧은 티저입니다. 오디오는 (1) 처음부터 흐르는 훅 나레이션 한 줄(보통
+ * 몽타주 전체 길이보다 짧게 끝남)과 (2) 각 장면 전환 시점마다 켜지는 드럼 히트들을 함께
+ * 섞은 뒤, 영상 길이에 맞춰 자르거나 무음으로 채웁니다 — 나레이션이 먼저 끝나도 남은
+ * 시간 동안 드럼 소리와 화면 전환만으로 긴장감을 유지합니다.
+ *
+ * @returns {Promise<{ clipPath: string, totalDurationSec: number }|null>} revealSegments가
+ *   비어있으면(이론상 최소 2개가 보장되지만 방어적으로) null을 반환해 호출자가 훅 없이
+ *   기존 방식대로 진행하게 합니다.
+ */
+async function buildHookMontageClip({ imagePath, imgWidth, imgHeight, revealSegments, hookAudioPath, hookDurationSec, workDir }) {
+  const n = revealSegments.length;
+  if (n === 0) return null;
+
+  const perSlice = Math.min(HOOK_MAX_SLICE_SEC, Math.max(HOOK_MIN_SLICE_SEC, HOOK_TARGET_TOTAL_SEC / n));
+  const totalDurationSec = perSlice * n;
+
+  const sliceClipPaths = [];
+  for (let i = 0; i < n; i++) {
+    const slicePath = path.join(workDir, `hook-slice-${i}.mp4`);
+    await buildSegmentClip({
+      imagePath,
+      imgWidth,
+      imgHeight,
+      bbox: revealSegments[i].bbox,
+      durationSec: perSlice,
+      outPath: slicePath,
+    });
+    sliceClipPaths.push(slicePath);
+  }
+
+  const montageVideoPath = path.join(workDir, 'hook-video.mp4');
+  await concatClips(sliceClipPaths, montageVideoPath);
+  for (const p of sliceClipPaths) fs.rmSync(p, { force: true });
+
+  const drumHitPath = path.join(workDir, 'hook-drum.wav');
+  await buildDrumHit({ outPath: drumHitPath });
+
+  // 훅 나레이션(입력 0) + 장면 전환마다(t=0, perSlice, 2*perSlice, ...) 같은 드럼 히트를
+  // adelay로 밀어 넣은 사본들(입력 1..n)을 한 번에 섞습니다. amix 결과를 몽타주 영상
+  // 길이(totalDurationSec)에 정확히 맞춰 자르거나(나레이션+드럼이 그보다 짧으면) 무음으로
+  // 채웁니다(apad) — muxSegmentAudio()의 -shortest가 영상을 나레이션 길이로 잘라버리는
+  // 일이 없도록, 오디오 트랙 길이를 영상 길이와 미리 맞춰두는 것입니다.
+  const inputArgs = ['-i', hookAudioPath];
+  for (let i = 0; i < n; i++) inputArgs.push('-i', drumHitPath);
+  const delayFilters = [];
+  for (let i = 0; i < n; i++) {
+    const delayMs = Math.round(i * perSlice * 1000);
+    delayFilters.push(`[${i + 1}:a]adelay=${delayMs}|${delayMs}[drum${i}]`);
+  }
+  const mixInputs = '[0:a]' + Array.from({ length: n }, (_, i) => `[drum${i}]`).join('');
+  const audioFilterComplex = [
+    ...delayFilters,
+    `${mixInputs}amix=inputs=${n + 1}:duration=longest:dropout_transition=0[mixed]`,
+    `[mixed]apad,atrim=0:${totalDurationSec.toFixed(3)}[out]`,
+  ].join(';');
+
+  const mixedAudioPath = path.join(workDir, 'hook-audio-mixed.wav');
+  await run('ffmpeg', [
+    '-y',
+    ...inputArgs,
+    '-filter_complex', audioFilterComplex,
+    '-map', '[out]',
+    '-ar', String(AUDIO_SAMPLE_RATE),
+    '-ac', String(AUDIO_CHANNELS),
+    mixedAudioPath,
+  ]);
+  fs.rmSync(drumHitPath, { force: true });
+
+  const clipPath = path.join(workDir, 'hook-final.mp4');
+  await muxSegmentAudio({ videoPath: montageVideoPath, audioPath: mixedAudioPath, outPath: clipPath });
+  fs.rmSync(montageVideoPath, { force: true });
+  fs.rmSync(mixedAudioPath, { force: true });
+
+  return { clipPath, totalDurationSec };
 }
 
 export async function muxSegmentAudio({ videoPath, audioPath, outPath }) {
@@ -620,19 +743,45 @@ export async function concatClips(clipPaths, outPath) {
 }
 
 /**
- * 전체 파이프라인: 세그먼트별 클립 생성 -> 오디오 합성 -> 인트로/아웃트로 -> 이어붙이기
- * -> SRT 자막 파일 생성 -> 썸네일 이미지 생성. segments 각 항목은
+ * 전체 파이프라인: (있으면) 훅 몽타주 -> 인트로/아웃트로 -> 세그먼트별 클립 생성 -> 오디오
+ * 합성 -> 이어붙이기 -> SRT 자막 파일 생성 -> 썸네일 이미지 생성. segments 각 항목은
  * { narration, bbox, audioPath, durationSec }를 가지고 있어야 합니다.
  *
+ * @param {{ text: string, audioPath: string, durationSec: number }} [hook] - 영상 맨 앞에 붙일
+ *   "숨은 이야기 훅" 몽타주(buildHookMontageClip() 참고)의 나레이션 텍스트/오디오. 주어지고
+ *   segments 안에 실제 확대 디테일(bbox가 전체 화면이 아닌 세그먼트)이 하나 이상 있으면
+ *   그 디테일들을 훑는 10초 안팎의 미리보기를 맨 앞에 추가합니다. 생략하거나 확대 디테일이
+ *   하나도 없으면(이론상 최소 2개가 보장되지만 방어적으로) 훅 없이 기존과 동일하게 동작합니다.
  * @returns {{ finalPath: string, srtPath: string, thumbnailPath: string }} finalPath는 자막이
  *   굽지 않은(burned-in caption 없는) 영상이고, srtPath는 YouTube 자막(CC) 트랙으로 별도
  *   업로드할 SRT 파일, thumbnailPath는 그림 전체가 잘리지 않고 다 보이는 썸네일 이미지입니다.
  */
-export async function assembleVideo({ imagePath, segments, painting, workDir }) {
+export async function assembleVideo({ imagePath, segments, painting, workDir, hook }) {
   fs.mkdirSync(workDir, { recursive: true });
   const { width: imgWidth, height: imgHeight } = await getImageDimensions(imagePath);
 
   const clipPaths = [];
+
+  // 훅 몽타주는 "사람이 실제로 확대하기로 고른 부분"만 대상으로 하므로, IDENTIFY/CONTEXT/
+  // CLOSE처럼 전체 화면을 보여주는 세그먼트는 isNearFullImageBbox()로 걸러냅니다.
+  let hookResult = null;
+  if (hook) {
+    const revealSegments = segments.filter((seg) => !isNearFullImageBbox(seg.bbox));
+    if (revealSegments.length > 0) {
+      hookResult = await buildHookMontageClip({
+        imagePath,
+        imgWidth,
+        imgHeight,
+        revealSegments,
+        hookAudioPath: hook.audioPath,
+        hookDurationSec: hook.durationSec,
+        workDir,
+      });
+      clipPaths.push(hookResult.clipPath);
+    } else {
+      console.warn('[video-builder] 확대 디테일 세그먼트가 없어 훅 몽타주를 건너뜁니다.');
+    }
+  }
 
   const introPath = path.join(workDir, 'intro.mp4');
   await buildTitleCard({
@@ -675,8 +824,24 @@ export async function assembleVideo({ imagePath, segments, painting, workDir }) 
   const finalPath = path.join(workDir, 'final.mp4');
   await concatClips(clipPaths, finalPath);
 
+  // 훅 몽타주가 있으면, 그 나레이션도 CC 자막에 포함시키고(시각 몽타주 자체보다 먼저
+  // 끝나는 게 보통이므로 hook.durationSec까지만) 이후 세그먼트들의 시작 시각을 훅 몽타주
+  // 전체 길이(totalDurationSec, 나레이션이 끝난 뒤의 무음 구간까지 포함)만큼 더 밀어냅니다.
   const srtPath = path.join(workDir, 'captions.srt');
-  fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
+  if (hookResult) {
+    const hookBlock = buildSrtBlock(1, 0, hook.durationSec, hook.text);
+    const restOffset = hookResult.totalDurationSec + INTRO_DURATION_SEC;
+    let t = restOffset;
+    const restBlocks = segments.map((seg, i) => {
+      const start = t;
+      const end = t + seg.durationSec;
+      t = end;
+      return buildSrtBlock(i + 2, start, end, seg.narration);
+    });
+    fs.writeFileSync(srtPath, [hookBlock, ...restBlocks].join('\n'));
+  } else {
+    fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
+  }
 
   const thumbnailPath = path.join(workDir, 'thumbnail.jpg');
   await buildThumbnail({ imagePath, topBadgeText: 'HIDDEN MEANING', outPath: thumbnailPath });
