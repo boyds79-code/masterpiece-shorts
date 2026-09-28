@@ -569,6 +569,11 @@ const HOOK_MAX_SLICE_SEC = 2.5;
 // ffmpeg만으로 그때그때 합성합니다 — 라이선스/저작권 걱정 없이, 어떤 환경(로컬/GitHub
 // Actions)에서도 별도 에셋 파일 없이 항상 똑같이 재현됩니다.
 const HOOK_DRUM_DURATION_SEC = 0.35;
+// 두 reveal 세그먼트의 bbox가 이 값 이상 겹치면(IoU 기준) "사실상 같은 곳"으로 보고
+// 훅 몽타주에서 한 장면으로 합칩니다. 초반 10초 안에 비슷한 위치/크기를 두세 번 연속
+// 보여주는 게 지루하다는 피드백에 따라 추가한 값 - 몽타주에서만 적용되고, 본문
+// 나레이션 세그먼트(segments 원본)에는 영향이 없습니다(각 디테일 설명은 그대로 유지).
+const HOOK_MERGE_IOU_THRESHOLD = 0.5;
 
 function formatSrtTimestamp(totalSeconds) {
   const ms = Math.max(0, Math.round(totalSeconds * 1000));
@@ -598,6 +603,43 @@ export function buildSrt(segments, introDurationSec = INTRO_DURATION_SEC) {
     return buildSrtBlock(i + 1, start, end, seg.narration);
   });
   return blocks.join('\n');
+}
+
+// bbox a/b가 얼마나 겹치는지를 0~1 사이 IoU(Intersection over Union)로 계산합니다.
+// bbox는 모두 이미지 전체를 1로 보는 비율 좌표(x,y,w,h)라서 이미지 크기와 무관하게
+// 비교할 수 있습니다. 완전히 같은 위치/크기면 1, 전혀 안 겹치면 0입니다.
+function bboxIou(a, b) {
+  const ax2 = a.x + a.w;
+  const ay2 = a.y + a.h;
+  const bx2 = b.x + b.w;
+  const by2 = b.y + b.h;
+  const ix1 = Math.max(a.x, b.x);
+  const iy1 = Math.max(a.y, b.y);
+  const ix2 = Math.min(ax2, bx2);
+  const iy2 = Math.min(ay2, by2);
+  const iw = Math.max(0, ix2 - ix1);
+  const ih = Math.max(0, iy2 - iy1);
+  const interArea = iw * ih;
+  const unionArea = a.w * a.h + b.w * b.h - interArea;
+  return unionArea > 0 ? interArea / unionArea : 0;
+}
+
+/**
+ * 훅 몽타주에 넣을 reveal 세그먼트 목록에서, 이미 앞서 채택된 것과 위치/크기가 비슷한
+ * (IoU >= HOOK_MERGE_IOU_THRESHOLD) 세그먼트는 건너뜁니다. 예를 들어 초상화의 손과
+ * 얼굴을 각각 디테일로 골랐는데 실제로는 거의 같은 영역을 가리킨다면, 몽타주에서는
+ * 한 장면만 보여줍니다 - 같은 곳을 초반 10초 안에 두세 번 연속으로 비춰봤자 지루하기만
+ * 하고 새로운 정보가 없기 때문입니다. 순서상 먼저 나온 세그먼트를 대표로 남기고 이후
+ * 것만 걸러냅니다. 본문 나레이션(assembleVideo의 segments 순회)에는 전혀 영향을 주지
+ * 않습니다 - 각 디테일은 본문에서 여전히 모두 따로 설명됩니다.
+ */
+function mergeSimilarRevealSegments(revealSegments) {
+  const merged = [];
+  for (const seg of revealSegments) {
+    const isSimilarToExisting = merged.some((m) => bboxIou(m.bbox, seg.bbox) >= HOOK_MERGE_IOU_THRESHOLD);
+    if (!isSimilarToExisting) merged.push(seg);
+  }
+  return merged;
 }
 
 /**
@@ -766,7 +808,11 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
   // CLOSE처럼 전체 화면을 보여주는 세그먼트는 isNearFullImageBbox()로 걸러냅니다.
   let hookResult = null;
   if (hook) {
-    const revealSegments = segments.filter((seg) => !isNearFullImageBbox(seg.bbox));
+    // 위치/크기가 비슷한 reveal 세그먼트는 mergeSimilarRevealSegments()로 한 장면만
+    // 남깁니다 - 같은 곳을 초반 10초 안에 두세 번 연속으로 비추지 않도록 하기 위함이며,
+    // 본문 세그먼트(segments)는 그대로 두므로 나레이션에서는 각 디테일이 전부 따로
+    // 설명됩니다.
+    const revealSegments = mergeSimilarRevealSegments(segments.filter((seg) => !isNearFullImageBbox(seg.bbox)));
     if (revealSegments.length > 0) {
       hookResult = await buildHookMontageClip({
         imagePath,
