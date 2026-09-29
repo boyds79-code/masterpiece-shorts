@@ -14,10 +14,24 @@ const FPS = 30;
 // daily-video.yml에서 apt-get install fonts-dejavu-core를 실행합니다.
 const FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
 
+// 개별 ffmpeg 호출 하나가 이 시간을 넘기면 강제 종료합니다. 정상적인 경우 이 파이프라인의
+// ffmpeg 호출(세그먼트 하나, 드럼 합성, 오디오 믹스 등)은 몇 초~길어야 1~2분이면 끝나므로,
+// 5분이면 실제로 멈춘(행업) 경우와 구분하기에 충분히 여유 있는 값입니다. 예전에는 타임아웃이
+// 아예 없어서, ffmpeg가 무슨 이유로든(리소스 경합, 알 수 없는 필터 문제 등) 멈추면
+// npm run build:review가 오류 메시지 하나 없이 그냥 영원히 멈춘 것처럼 보이는 문제가
+// 있었습니다(실제로 겪은 사례) — 이제는 최소한 명확한 에러로 실패해서 다시 시도할 수 있습니다.
+const FFMPEG_TIMEOUT_MS = 5 * 60 * 1000;
+
 async function run(cmd, args) {
   try {
-    return await execFileAsync(cmd, args, { maxBuffer: 1024 * 1024 * 64 });
+    return await execFileAsync(cmd, args, { maxBuffer: 1024 * 1024 * 64, timeout: FFMPEG_TIMEOUT_MS });
   } catch (err) {
+    if (err.killed && err.signal) {
+      throw new Error(
+        `${cmd} 실행이 ${FFMPEG_TIMEOUT_MS / 1000}초를 넘겨 멈춘 것으로 보여 강제 종료했습니다 (신호: ${err.signal}). ` +
+          '일시적인 시스템 부하일 수 있으니 다시 시도해보세요. 계속 반복되면 알려주세요.'
+      );
+    }
     throw new Error(`${cmd} 실행 실패: ${err.stderr || err.message}`);
   }
 }
@@ -687,6 +701,7 @@ async function buildHookMontageClip({ imagePath, imgWidth, imgHeight, revealSegm
 
   const perSlice = Math.min(HOOK_MAX_SLICE_SEC, Math.max(HOOK_MIN_SLICE_SEC, HOOK_TARGET_TOTAL_SEC / n));
   const totalDurationSec = perSlice * n;
+  console.log(`[video-builder] 훅 몽타주: 디테일 ${n}개, 장면당 ${perSlice.toFixed(2)}초 (총 ${totalDurationSec.toFixed(1)}초)`);
 
   const sliceClipPaths = [];
   for (let i = 0; i < n; i++) {
@@ -700,14 +715,17 @@ async function buildHookMontageClip({ imagePath, imgWidth, imgHeight, revealSegm
       outPath: slicePath,
     });
     sliceClipPaths.push(slicePath);
+    console.log(`[video-builder]   훅 장면 ${i + 1}/${n} 완료`);
   }
 
   const montageVideoPath = path.join(workDir, 'hook-video.mp4');
   await concatClips(sliceClipPaths, montageVideoPath);
   for (const p of sliceClipPaths) fs.rmSync(p, { force: true });
+  console.log('[video-builder]   훅 장면 이어붙이기 완료');
 
   const drumHitPath = path.join(workDir, 'hook-drum.wav');
   await buildDrumHit({ outPath: drumHitPath });
+  console.log('[video-builder]   드럼 효과음 합성 완료');
 
   // 훅 나레이션(입력 0) + 장면 전환마다(t=0, perSlice, 2*perSlice, ...) 같은 드럼 히트를
   // adelay로 밀어 넣은 사본들(입력 1..n)을 한 번에 섞습니다. amix 결과를 몽타주 영상
@@ -739,11 +757,13 @@ async function buildHookMontageClip({ imagePath, imgWidth, imgHeight, revealSegm
     mixedAudioPath,
   ]);
   fs.rmSync(drumHitPath, { force: true });
+  console.log('[video-builder]   훅 오디오 믹싱 완료');
 
   const clipPath = path.join(workDir, 'hook-final.mp4');
   await muxSegmentAudio({ videoPath: montageVideoPath, audioPath: mixedAudioPath, outPath: clipPath });
   fs.rmSync(montageVideoPath, { force: true });
   fs.rmSync(mixedAudioPath, { force: true });
+  console.log('[video-builder]   훅 몽타주 완성');
 
   return { clipPath, totalDurationSec };
 }
@@ -829,6 +849,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
     }
   }
 
+  console.log('[video-builder] 인트로 카드 만드는 중...');
   const introPath = path.join(workDir, 'intro.mp4');
   await buildTitleCard({
     imagePath,
@@ -838,11 +859,13 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
     topBadgeText: 'HIDDEN MEANING',
   });
   clipPaths.push(introPath);
+  console.log('[video-builder] 인트로 카드 완료');
 
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     const rawVideo = path.join(workDir, `seg-${i}-video.mp4`);
     const finalSeg = path.join(workDir, `seg-${i}-final.mp4`);
+    console.log(`[video-builder] 세그먼트 ${i + 1}/${segments.length} 영상 조립 중... ("${seg.focus || seg.narration.slice(0, 20)}")`);
 
     await buildSegmentClip({
       imagePath,
@@ -856,8 +879,10 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
     await muxSegmentAudio({ videoPath: rawVideo, audioPath: seg.audioPath, outPath: finalSeg });
     fs.rmSync(rawVideo, { force: true });
     clipPaths.push(finalSeg);
+    console.log(`[video-builder] 세그먼트 ${i + 1}/${segments.length} 완료`);
   }
 
+  console.log('[video-builder] 아웃트로 카드 만드는 중...');
   const outroPath = path.join(workDir, 'outro.mp4');
   await buildTitleCard({
     imagePath,
@@ -866,9 +891,12 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
     outPath: outroPath,
   });
   clipPaths.push(outroPath);
+  console.log('[video-builder] 아웃트로 카드 완료');
 
+  console.log(`[video-builder] 전체 클립 ${clipPaths.length}개 이어붙이는 중...`);
   const finalPath = path.join(workDir, 'final.mp4');
   await concatClips(clipPaths, finalPath);
+  console.log('[video-builder] 전체 영상 조립 완료');
 
   // 훅 몽타주가 있으면, 그 나레이션도 CC 자막에 포함시키고(시각 몽타주 자체보다 먼저
   // 끝나는 게 보통이므로 hook.durationSec까지만) 이후 세그먼트들의 시작 시각을 훅 몽타주
@@ -891,6 +919,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
 
   const thumbnailPath = path.join(workDir, 'thumbnail.jpg');
   await buildThumbnail({ imagePath, topBadgeText: 'HIDDEN MEANING', outPath: thumbnailPath });
+  console.log('[video-builder] 썸네일 완료');
 
   return { finalPath, srtPath, thumbnailPath };
 }
