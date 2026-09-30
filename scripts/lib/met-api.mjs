@@ -25,10 +25,11 @@ const REGIONS = {
 // 3. 403이 MAX_CONSECUTIVE_403번 연속으로 나오면 "차단 중"으로 보고 즉시 멈춥니다.
 // 429/5xx나 일시적인 네트워크 끊김은 잠깐 기다렸다가 다시 시도합니다.
 const USER_AGENT = 'Mozilla/5.0 (compatible; masterpiece-shorts/1.0; art-history video project)';
-const MIN_REQUEST_INTERVAL_MS = 300;
+const MIN_REQUEST_INTERVAL_MS = 800;
 const MAX_CONSECUTIVE_403 = 3;
 const MAX_ATTEMPTS = 3;
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const FORBIDDEN_BACKOFF_BASE_MS = 8000; // 403을 받으면 바로 다음 요청으로 넘어가지 않고 이만큼 쉽니다.
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let lastRequestAt = 0;
@@ -66,6 +67,18 @@ async function metFetch(url, label = 'Met API 요청') {
           ),
           { code: 'MET_BLOCKED' }
         );
+      }
+      // 이전에는 여기서 바로 던져서 호출한 쪽(getObject 루프)이 곧바로 다음 objectID를
+      // 같은 속도로 두드렸습니다 — 이미 403을 받고 있는 상황에서 그건 차단을 더 굳힐 수
+      // 있는 행동이라, 같은 요청을 잠깐 쉬었다가 다시 시도합니다(시도 횟수가 남아있는
+      // 동안만; 그래도 계속 403이면 결국 위의 MAX_CONSECUTIVE_403에 걸려 멈춥니다).
+      if (attempt < MAX_ATTEMPTS) {
+        const forbiddenBackoff = FORBIDDEN_BACKOFF_BASE_MS * consecutive403;
+        console.warn(
+          `[met-api] 403 응답 (연속 ${consecutive403}/${MAX_CONSECUTIVE_403}) — 차단이 굳어지지 않도록 ${forbiddenBackoff / 1000}초 대기 후 같은 요청을 재시도합니다...`
+        );
+        await sleep(forbiddenBackoff);
+        continue;
       }
       throw new Error(`${label} 실패 (403): ${url}`);
     }

@@ -117,7 +117,7 @@ export function normalizeYoutube(raw, painting, { fallbackTitle } = {}) {
   let description = clean(y.description);
   if (!description) {
     description = clean(
-      `${paintingTitle}${artist ? ` by ${artist}` : ''} — the hidden meanings most viewers miss.\n\nPublic domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.`
+      `${paintingTitle}${artist ? ` by ${artist}` : ''} — the hidden meanings most viewers miss.\n\nPublic domain image via ${painting?.sourceMuseumName || 'The Metropolitan Museum of Art (metmuseum.org)'}, CC0.`
     );
   }
 
@@ -222,7 +222,7 @@ function buildMetadataBlock(painting) {
     painting.department ? `Department: ${painting.department}` : null,
     painting.creditLine ? `Credit line: ${painting.creditLine}` : null,
     painting.dimensions ? `Dimensions: ${painting.dimensions}` : null,
-    `Source: The Metropolitan Museum of Art, object #${painting.objectID}, ${painting.objectURL}`,
+    `Source: ${painting.sourceMuseumName || 'The Metropolitan Museum of Art (metmuseum.org)'}, object #${painting.objectID}, ${painting.objectURL}`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -525,7 +525,7 @@ THE MOST IMPORTANT RULE — avoid flat description: never just describe what a d
 - Tone: curious, a little conspiratorial — like a knowledgeable friend leaning in to tell you a secret hiding in plain sight, not a dry textbook or museum placard. Short punchy sentences. Rhetorical questions sparingly.
 - Narration total length across IDENTIFY + CONTEXT + every reveal + CLOSE: roughly 170-230 words total (this becomes ~70-95 seconds of spoken narration) regardless of how many reveal details there are — do not go far outside this range.
 - Write a scroll-stopping YouTube Shorts title (under 90 characters) that promises a hidden meaning or secret, names the painting and/or artist, and creates real curiosity, without being clickbait-dishonest.
-- Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting "Public domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.", then a few relevant hashtags.
+- Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting the source museum and license given in the "Source:" line above (e.g. "Public domain image via <museum name>, CC0."), then a few relevant hashtags.
 - Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art movement/period, and general art-content discovery terms.
 - The "youtube" field must be a JSON object with title/description/tags fields, not a string.
 
@@ -714,7 +714,7 @@ Last segment. CLOSE (bbox = the whole painting again): Pull back out and tie the
 - Then provide a "bbox": the region of the image to visually zoom into while that narration plays, as fractions of the full image (0.0 to 1.0), with x,y = top-left corner of the crop box and w,h = width/height of the crop box. Constraints: 0 <= x, 0 <= y, x+w <= 1, y+h <= 1, and w >= 0.12 and h >= 0.12 (never crop absurdly tiny — it will look pixelated). The IDENTIFY, CONTEXT, and CLOSE segments should use approximately the full image (x:0, y:0, w:1, h:1, or very close to it). CRITICAL: double-check that your numeric bbox is actually consistent with the gridPosition you just named — e.g. "top-left" means x and y should both be small (roughly 0.0-0.35), not somewhere else in the image. Zooming into the wrong object is the single worst mistake you can make here, worse than an imperfect narration — a viewer immediately notices when the narration says one thing and the screen shows another.
 - Also write a short "focus" label (3-6 words, e.g. "her folded hands", "the storm clouds behind him") describing what that segment's crop shows — used internally, not shown to viewers.
 - Write a scroll-stopping YouTube Shorts title (under 90 characters) that promises a hidden meaning or secret, names the painting and/or artist, and creates real curiosity, without being clickbait-dishonest.
-- Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting "Public domain image via The Metropolitan Museum of Art (metmuseum.org), CC0.", then a few relevant hashtags.
+- Write a YouTube description: 2-4 sentences about the painting and the hidden meanings the video reveals, then a line crediting the source museum and license given in the "Source:" line above (e.g. "Public domain image via <museum name>, CC0."), then a few relevant hashtags.
 - Write 8-15 relevant YouTube tags (lowercase, no # symbol) mixing the artist name, painting name, art movement/period, and general art-content discovery terms (e.g. "art history", "hidden meaning", "famous paintings", "art explained").
 - The "youtube" field must be a JSON object with title/description/tags fields, and "segments" must be a JSON array — never a string.
 

@@ -70,7 +70,7 @@ export async function generateProcessScript({ painting, imageBufferForVision, im
     painting.culture ? `Culture: ${painting.culture}` : null,
     painting.department ? `Department: ${painting.department}` : null,
     painting.creditLine ? `Credit line: ${painting.creditLine}` : null,
-    `Source: The Metropolitan Museum of Art, object #${painting.objectID}, ${painting.objectURL}`,
+    `Source: ${painting.sourceMuseumName || 'The Metropolitan Museum of Art (metmuseum.org)'}, object #${painting.objectID}, ${painting.objectURL}`,
   ]
     .filter(Boolean)
     .join('\n');

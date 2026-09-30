@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { pickUnusedPainting, downloadImage } from './lib/met-api.mjs';
+import { pickUnusedPainting, downloadImage } from './lib/painting-source.mjs';
 import { generateProcessScript } from './lib/process-script.mjs';
 import { generateStageImage } from './lib/gemini-image.mjs';
 import { generateNarrationAudio } from './lib/gemini-tts.mjs';
@@ -99,12 +99,12 @@ export async function generateOneProcessVideo() {
   let imagePath, visionPath;
 
   for (let attempt = 1; attempt <= MAX_PAINTING_ATTEMPTS; attempt++) {
-    console.log(`[generate-process] 메트로폴리탄 미술관에서 아직 쓰지 않은 명화를 고르는 중... (시도 ${attempt}/${MAX_PAINTING_ATTEMPTS})`);
+    console.log(`[generate-process] 아직 쓰지 않은 명화를 고르는 중... Met 우선, 차단 시 AIC로 자동 전환 (시도 ${attempt}/${MAX_PAINTING_ATTEMPTS})`);
     const usedIds = usedList.map((u) => u.objectID);
     const candidate = await pickUnusedPainting(usedIds);
 
     if (!candidate) {
-      console.log('[generate-process] 하이라이트로 지정된 유럽 회화 작품을 모두 소진했습니다.');
+      console.log('[generate-process] Met과 대체 소스(AIC) 모두에서 쓸 수 있는 새 작품을 찾지 못했습니다.');
       fs.rmSync(workDir, { recursive: true, force: true });
       return null;
     }

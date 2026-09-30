@@ -63,7 +63,7 @@ export async function generateLongformScript({ painting, imageBufferForVision, i
     painting.department ? `Department: ${painting.department}` : null,
     painting.creditLine ? `Credit line: ${painting.creditLine}` : null,
     painting.dimensions ? `Dimensions: ${painting.dimensions}` : null,
-    `Source: The Metropolitan Museum of Art, object #${painting.objectID}, ${painting.objectURL}`,
+    `Source: ${painting.sourceMuseumName || 'The Metropolitan Museum of Art (metmuseum.org)'}, object #${painting.objectID}, ${painting.objectURL}`,
   ]
     .filter(Boolean)
     .join('\n');
