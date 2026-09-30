@@ -44,3 +44,4 @@
 | 2026-09-29 | The Meditation on the Passion | Vittore Carpaccio | [TGR8EAL0eeI](https://studio.youtube.com/video/TGR8EAL0eeI/edit) |
 | 2026-09-29 | The Horse Fair | Rosa Bonheur | [ECA2Sw9G64I](https://studio.youtube.com/video/ECA2Sw9G64I/edit) |
 | 2026-09-30 | Sibylle | Camille Corot | [hsZYEKopi1s](https://studio.youtube.com/video/hsZYEKopi1s/edit) |
+| 2026-09-30 | The Crucifixion with Saints and a Donor | Joos van Cleve | [IBzPRAMZv1w](https://studio.youtube.com/video/IBzPRAMZv1w/edit) |
