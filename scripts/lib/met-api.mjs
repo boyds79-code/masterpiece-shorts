@@ -2,8 +2,29 @@
 // 문서: https://metmuseum.github.io/ — API 키가 필요 없고, 반환되는 이미지/데이터는
 // isPublicDomain === true 인 경우 CC0(저작권 없음)로 명시되어 있습니다.
 // 우리는 이 필드를 반드시 다시 한번 확인해서, 퍼블릭 도메인이 아닌 작품은 절대 쓰지 않습니다.
+//
+// 2026-10-01: Met이 예고했던 대로 구버전 검색 엔드포인트(v1 /search)를 오늘부로 완전히
+// 폐기하고 v1.1/search로 교체했습니다 (v1 /search 요청은 이제 410 Gone을 반환합니다).
+// v1.1은 /objects/{id} 단건 조회에는 영향이 없고, 검색에만 영향이 있습니다. 바뀐 점:
+//   1. 엔드포인트가 .../v1/search → .../v1.1/search 로 바뀌었습니다.
+//   2. 부서 필터 파라미터명이 "departmentIds"(복수)가 아니라 "departmentId"(단수)입니다.
+//      사실 Met API는 모르는 파라미터를 조용히 무시하는 방식이라, 그동안 "departmentIds"로
+//      보내던 요청은 부서 필터가 전혀 적용되지 않은 채로 동작하고 있었을 가능성이 큽니다
+//      (실제로 같은 요청에 다른 departmentIds를 넣어도 똑같은 결과가 나오는 걸 확인했습니다).
+//      이번에 올바른 파라미터명으로 고치면서, 부서 필터가 처음으로 제대로 걸리게 됩니다.
+//   3. v1.1은 기본적으로 한 페이지(최대 100개, limit 파라미터로 최대 500개까지)만 주고
+//      total 필드로 전체 개수만 알려줍니다. 그래서 필요하면 offset을 늘려가며 여러 페이지를
+//      더 가져오는 페이지네이션을 추가했습니다 (offset+limit은 10000을 넘을 수 없다는 제약이
+//      있어서 그 지점에서 멈춥니다 — 우리가 쓰는 "하이라이트 회화" 필터는 그보다 훨씬 작아서
+//      실질적으로는 문제가 안 됩니다).
 
-const BASE = 'https://collectionapi.metmuseum.org/public/collection/v1';
+const SEARCH_BASE = 'https://collectionapi.metmuseum.org/public/collection/v1.1';
+const OBJECTS_BASE = 'https://collectionapi.metmuseum.org/public/collection/v1';
+
+// v1.1 검색 결과를 한 번에 몇 개씩 가져올지 (API 최대값).
+const SEARCH_PAGE_LIMIT = 500;
+// v1.1의 offset+limit 상한 — 이 지점을 넘는 페이지는 요청하지 않습니다.
+const SEARCH_MAX_OFFSET = 10000;
 
 // 화가의 지역(서양/동양)별로 어떤 Met 부서를 볼지, 그리고 그 지역이 뽑힐 확률(가중치)을
 // 정의합니다. isHighlight=true 는 Met이 자체적으로 "대표작/명작"으로 큐레이션한 작품만
@@ -42,6 +63,7 @@ const REGIONS = {
 // 2. 요청 사이에 최소 간격(MIN_REQUEST_INTERVAL_MS)을 둬서 한꺼번에 몰리지 않게 합니다.
 // 3. 403이 MAX_CONSECUTIVE_403번 연속으로 나오면 "차단 중"으로 보고 즉시 멈춥니다.
 // 429/5xx나 일시적인 네트워크 끊김은 잠깐 기다렸다가 다시 시도합니다.
+// (공식 문서 기준 권장 요청 속도는 초당 80회까지라, 지금 간격은 충분히 여유 있습니다.)
 const USER_AGENT = 'Mozilla/5.0 (compatible; masterpiece-shorts/1.0; art-history video project)';
 const MIN_REQUEST_INTERVAL_MS = 800;
 const MAX_CONSECUTIVE_403 = 3;
@@ -114,13 +136,34 @@ async function fetchJson(url) {
   return res.json();
 }
 
+// v1.1/search는 한 페이지(최대 500개)만 주고 total로 전체 개수를 알려주는 방식이라,
+// 필요하면 offset을 늘려가며 전체를 끝까지 가져옵니다.
+async function searchAllPages(baseParams) {
+  const ids = [];
+  let offset = 0;
+  for (;;) {
+    const params = new URLSearchParams({ ...baseParams, limit: String(SEARCH_PAGE_LIMIT), offset: String(offset) });
+    const data = await fetchJson(`${SEARCH_BASE}/search?${params.toString()}`);
+    const pageIds = data.objectIDs || [];
+    ids.push(...pageIds);
+    const total = typeof data.total === 'number' ? data.total : ids.length;
+    offset += SEARCH_PAGE_LIMIT;
+    if (pageIds.length === 0 || ids.length >= total || offset >= SEARCH_MAX_OFFSET) break;
+  }
+  return ids;
+}
+
 // 특정 부서 ID들의 하이라이트(명작) 유화 작품 objectID 목록을 가져옵니다.
 async function searchHighlightPaintingIdsForDepartments(departmentIds) {
   const ids = new Set();
   for (const deptId of departmentIds) {
-    const url = `${BASE}/search?isHighlight=true&hasImages=true&departmentIds=${deptId}&q=painting`;
-    const data = await fetchJson(url);
-    for (const id of data.objectIDs || []) ids.add(id);
+    const pageIds = await searchAllPages({
+      isHighlight: 'true',
+      hasImages: 'true',
+      departmentId: String(deptId),
+      q: 'painting',
+    });
+    for (const id of pageIds) ids.add(id);
   }
   return [...ids];
 }
@@ -131,7 +174,7 @@ export async function searchHighlightPaintingIds() {
 }
 
 export async function getObject(objectId) {
-  return fetchJson(`${BASE}/objects/${objectId}`);
+  return fetchJson(`${OBJECTS_BASE}/objects/${objectId}`);
 }
 
 // European Paintings(11) 부서로 검색을 좁혀도, 조각적 요소가 있는 패널/제단화나
@@ -192,10 +235,9 @@ export function pickRegionByWeight() {
 // 아직 쓰지 않은 명화 하나를 고릅니다. usedIds는 data/used-paintings.json의 objectID 목록.
 //
 // 먼저 REGIONS의 가중치대로 지역(서양/동양)을 하나 뽑고, 그 지역에 해당하는 부서에서만
-// 찾습니다. Met API의 departmentIds 필터는 q=painting 같은 텍스트 검색과 함께 쓰면
-// 완벽하게 걸러주지 않는 경우가 있어서(다른 부서 작품이 섞여 나올 수 있음), obj.department
-// 값을 다시 한번 확인해 실제로 그 지역 부서가 맞는 작품만 채택합니다 — 그래야 가중치가
-// 실제 결과 비율과 어긋나지 않습니다.
+// 찾습니다. v1.1 검색은 (v1과 달리) departmentId 파라미터를 실제로 지원하지만, 혹시 모를
+// 분류 오차에 대비해 obj.department 값을 다시 한번 확인해 실제로 그 지역 부서가 맞는
+// 작품만 채택합니다 — 그래야 가중치가 실제 결과 비율과 어긋나지 않습니다.
 //
 // 뽑은 지역에 남은(안 쓴) 작품이 없으면 다른 지역들도 순서대로 시도해서, 전체 하이라이트를
 // 다 쓰기 전까지는 가능한 한 null을 반환하지 않도록 합니다.
