@@ -904,5 +904,82 @@
     "skippedAt": "2026-10-01T12:01:58.944Z",
     "skipped": true,
     "reason": "Claude가 후보 디테일을 제대로 반환하지 않았습니다: candidates가 배열이 아님 (stop_reason: tool_use, 받은 키: candidates)"
+  },
+  {
+    "objectID": 436528,
+    "title": "Irises",
+    "artistDisplayName": "Vincent van Gogh",
+    "reservedAt": "2026-09-18T01:50:14.856Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 436504,
+    "title": "The Adoration of the Magi",
+    "artistDisplayName": "Giotto di Bondone",
+    "reservedAt": "2026-09-20T20:01:33.789Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 437790,
+    "title": "Allegory of the Planets and Continents",
+    "artistDisplayName": "Giovanni Battista Tiepolo",
+    "reservedAt": "2026-09-21T14:42:46.168Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 39668,
+    "title": "Old Trees, Level Distance",
+    "artistDisplayName": "Guo Xi",
+    "reservedAt": "2026-09-23T01:33:42.305Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 436579,
+    "title": "Broken Eggs",
+    "artistDisplayName": "Jean-Baptiste Greuze",
+    "reservedAt": "2026-09-23T01:37:17.810Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 435876,
+    "title": "Madame Cézanne (Hortense Fiquet, 1850–1922) in a Red Dress",
+    "artistDisplayName": "Paul Cézanne",
+    "reservedAt": "2026-09-23T02:56:07.384Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 40055,
+    "title": "Emperor Xuanzong's flight to Shu",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-23T03:00:59.565Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 40447,
+    "title": "Grapevine and Squirrels",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-23T03:07:08.676Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 436575,
+    "title": "View of Toledo",
+    "artistDisplayName": "El Greco (Domenikos Theotokopoulos)",
+    "reservedAt": "2026-09-23T15:49:17.914Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 74813,
+    "title": "Shakyamuni triad",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-24T16:10:08.068Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": 656430,
+    "title": "Portrait of Yun Dongseom (1710–1795)",
+    "artistDisplayName": "Unidentified artist",
+    "reservedAt": "2026-09-24T23:52:02.591Z",
+    "reservedForReview": true
   }
 ]
