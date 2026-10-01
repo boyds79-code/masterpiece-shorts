@@ -17,12 +17,19 @@ const BASE = 'https://collectionapi.metmuseum.org/public/collection/v1';
 // 하이라이트 작품이 거의 바닥나서(이미 188개 사용) 매번 western이 소진 처리되고 eastern으로만
 // 넘어가는 문제가 생겼습니다. 같은 isHighlight 큐레이션을 믿을 수 있는 다른 서양 미술 부서,
 // Robert Lehman Collection(15, 유럽 올드마스터 회화/드로잉 위주)과 Modern Art(21, 서양
-// 근현대 회화)를 추가해서 풀을 넓혔습니다. (부서 ID/표시명은 Met API /departments 엔드포인트
-// 기준, https://metmuseum.github.io/ 문서 참고.)
+// 근현대 회화)를 추가해서 풀을 넓혔습니다. (부서 ID는 Met API /departments 엔드포인트 기준.)
+//
+// 2026-10 (버그 수정): 위 작업 직후, 실제 운영 데이터를 샘플링해서 검증해보니 Met의
+// /departments 목록에 적힌 공식 부서명("The Robert Lehman Collection", "Modern Art")과
+// 실제 개별 작품 JSON의 department 필드 값이 서로 달랐습니다 — 진짜 값은 "Robert Lehman
+// Collection"(The 없음), "Modern and Contemporary Art"였습니다. 이름이 한 글자도 안 맞아서
+// 아래 isActualPainting 이후 department 매칭 단계에서 전부 걸러지고 있었고, 결과적으로 위
+// 확장이 사실상 적용되지 않고 European Paintings 하나로만 동작하고 있었습니다. 실제 샘플
+// 조회로 확인한 진짜 필드 값으로 교체합니다.
 const REGIONS = {
   western: {
     departmentIds: [11, 15, 21],
-    departmentNames: ['European Paintings', 'The Robert Lehman Collection', 'Modern Art'],
+    departmentNames: ['European Paintings', 'Robert Lehman Collection', 'Modern and Contemporary Art'],
     weight: 9,
   },
   eastern: { departmentIds: [6], departmentNames: ['Asian Art'], weight: 1 },
@@ -79,10 +86,6 @@ async function metFetch(url, label = 'Met API 요청') {
           { code: 'MET_BLOCKED' }
         );
       }
-      // 이전에는 여기서 바로 던져서 호출한 쪽(getObject 루프)이 곧바로 다음 objectID를
-      // 같은 속도로 두드렸습니다 — 이미 403을 받고 있는 상황에서 그건 차단을 더 굳힐 수
-      // 있는 행동이라, 같은 요청을 잠깐 쉬었다가 다시 시도합니다(시도 횟수가 남아있는
-      // 동안만; 그래도 계속 403이면 결국 위의 MAX_CONSECUTIVE_403에 걸려 멈춥니다).
       if (attempt < MAX_ATTEMPTS) {
         const forbiddenBackoff = FORBIDDEN_BACKOFF_BASE_MS * consecutive403;
         console.warn(
