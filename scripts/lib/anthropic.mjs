@@ -515,13 +515,15 @@ A human editor has ALREADY chosen exactly which hidden details this specific vid
 
 Do NOT introduce new details, drop any of the given details, or change which regions are shown — the crop regions are already fixed and out of scope here. Just write the words, in a good order.
 
+CRITICAL — this exact subject may have been painted by many different artists across centuries (e.g. "Coronation of the Virgin", "Madonna and Child", "The Last Supper" all have dozens of famous, visually very different versions). When writing IDENTIFY and CONTEXT especially, describe ONLY what THIS specific attached image actually shows. Never state a material, object, pose, light source, or color just because it is typical/traditional for this subject in general — if you're tempted to write something because paintings of this subject "usually" have it, stop and check the actual pixels instead; if you can't confirm it in the image, leave it out.
+
 THE MOST IMPORTANT RULE — avoid flat description: never just describe what a detail looks like. Every reveal narration must explain WHY it matters, using the payoff you were given for it, in your own natural spoken voice — not a dry restatement.
 
 - IDENTIFY narration: clearly state what the painting is, who painted it, roughly when, and a hook that promises a hidden layer about to be discovered.
-- CONTEXT narration: the bigger picture — what scene/moment this is, why it was painted, historical/cultural context. Scene-setting, not a detail zoom.
+- CONTEXT narration: the bigger picture — what scene/moment this is, why it was painted, historical/cultural context. Scene-setting, not a detail zoom. Base any claim about what's depicted strictly on the image and the given metadata, never on generic conventions of the genre.
 - Each reveal narration: ONE to THREE short sentences, must stand alone as a natural spoken chunk (no "as we discussed before" type references).
 - CLOSE narration: pull back out, tie the hidden meanings together into one closing thought, then (only if it fits naturally) a light non-salesy nudge like "next time you see a painting, look for what it's not saying out loud."
-- Only state facts you're reasonably confident about from the given metadata, the payoffs you were given, or well-established uncontroversial art history; flag genuine scholarly debate rather than asserting it as settled fact; never invent anecdotes.
+- Only state facts you're reasonably confident about from the given metadata, the payoffs you were given, or well-established uncontroversial facts about the artist/period/movement (nationality, era, style, patronage) — never a visual/compositional claim about what's actually depicted unless it's confirmed by the image itself or by the given payoffs. Flag genuine scholarly debate rather than asserting it as settled fact; never invent anecdotes.
 - Tone: curious, a little conspiratorial — like a knowledgeable friend leaning in to tell you a secret hiding in plain sight, not a dry textbook or museum placard. Short punchy sentences. Rhetorical questions sparingly.
 - Narration total length across IDENTIFY + CONTEXT + every reveal + CLOSE: roughly 170-230 words total (this becomes ~70-95 seconds of spoken narration) regardless of how many reveal details there are — do not go far outside this range.
 - Write a scroll-stopping YouTube Shorts title (under 90 characters) that promises a hidden meaning or secret, names the painting and/or artist, and creates real curiosity, without being clickbait-dishonest.
@@ -531,10 +533,179 @@ THE MOST IMPORTANT RULE — avoid flat description: never just describe what a d
 
 You must respond by calling the "submit_narration" tool exactly once.`;
 
+  function buildBody(extraNote) {
+    return {
+      model: model || DEFAULT_MODEL,
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: imageMediaType,
+                data: imageBufferForVision.toString('base64'),
+              },
+            },
+            {
+              type: 'text',
+              text: `Here is the painting's museum metadata:\n\n${metadataBlock}\n\nHere are the hidden details a human editor already selected for this video (do not change their regions — just write narration for them and put them in a good order):\n\n${detailsBlock}\n\n${extraNote ? extraNote + '\n\n' : ''}Write the narration now.`,
+            },
+          ],
+        },
+      ],
+      tools: [
+        {
+          name: 'submit_narration',
+          description: 'Submit narration, ordering, and YouTube metadata for the pre-selected hidden details.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              youtube: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  tags: { type: 'array', items: { type: 'string' }, minItems: 8, maxItems: 15 },
+                },
+                required: ['title', 'description', 'tags'],
+              },
+              identifyNarration: { type: 'string' },
+              contextNarration: { type: 'string' },
+              reveals: {
+                type: 'array',
+                description: 'Every given detail id, exactly once each, in the chosen storytelling order, with its narration.',
+                minItems: selectedDetails.length,
+                maxItems: selectedDetails.length,
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    narration: { type: 'string' },
+                  },
+                  required: ['id', 'narration'],
+                },
+              },
+              closeNarration: { type: 'string' },
+            },
+            required: ['youtube', 'identifyNarration', 'contextNarration', 'reveals', 'closeNarration'],
+          },
+        },
+      ],
+      tool_choice: { type: 'tool', name: 'submit_narration' },
+    };
+  }
+
+  // 같은 제목의 그림이 매우 흔한 주제(대관식, 최후의 만찬 등)일 때, Claude가 이 특정
+  // 이미지가 아니라 "이 주제를 그린 그림들에 흔한" 내용(재질/자세/조명 등)을 섞어 쓰는
+  // 경우가 있습니다. 선택된 디테일(bbox 크롭 검증 완료)과 달리 IDENTIFY/CONTEXT/CLOSE는
+  // 크롭 검증을 거치지 않으므로, 나레이션 전체를 실제 이미지와 한 번 더 대조하고, 문제가
+  // 있으면 구체적으로 지적해서 다시 쓰게 합니다.
+  const MAX_NARRATION_ATTEMPTS = 2;
+  let result;
+  let segments;
+  let feedbackNote = '';
+
+  for (let attempt = 1; attempt <= MAX_NARRATION_ATTEMPTS; attempt++) {
+    const data = await callClaude(buildBody(feedbackNote), apiKey, { label: 'Claude 대본(선택된 디테일) API' });
+    const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_narration');
+    if (!toolUse) {
+      throw new Error('Claude 응답에서 submit_narration tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
+    }
+
+    result = toolUse.input;
+    // reveals 배열이 문자열로 감싸져 오는 경우 — 파싱해서 정상 경로로 처리합니다.
+    result.reveals = parseIfJsonString(result.reveals);
+
+    // Claude가 id를 빠뜨리거나 중복 반환해도 죽지 않도록 방어적으로 재구성합니다 — 주어진
+    // selectedDetails 전부가, 정확히 한 번씩, 최종 segments에 반영되는 것을 보장합니다.
+    const byId = new Map(selectedDetails.map((d) => [d.id, d]));
+    const seen = new Set();
+    const reveals = [];
+    for (const r of Array.isArray(result.reveals) ? result.reveals : []) {
+      if (r && byId.has(r.id) && !seen.has(r.id) && typeof r.narration === 'string' && r.narration.trim()) {
+        reveals.push({ detail: byId.get(r.id), narration: r.narration.trim() });
+        seen.add(r.id);
+      }
+    }
+    for (const d of selectedDetails) {
+      if (!seen.has(d.id)) {
+        console.warn(`[anthropic]   Claude가 detail id "${d.id}"의 narration을 빠뜨려 teaser로 대체합니다.`);
+        reveals.push({ detail: d, narration: d.teaser });
+        seen.add(d.id);
+      }
+    }
+
+    const fullImageBbox = { x: 0, y: 0, w: 1, h: 1 };
+    segments = [
+      { narration: result.identifyNarration, focus: '그림 전체 소개', gridPosition: 'full image', bbox: { ...fullImageBbox } },
+      { narration: result.contextNarration, focus: '배경/맥락 설명', gridPosition: 'full image', bbox: { ...fullImageBbox } },
+      ...reveals.map(({ detail, narration }) => ({
+        narration,
+        focus: detail.focus,
+        gridPosition: detail.gridPosition,
+        bbox: { ...detail.bbox },
+      })),
+      { narration: result.closeNarration, focus: '마무리', gridPosition: 'full image', bbox: { ...fullImageBbox } },
+    ];
+
+    console.log(`[anthropic]   나레이션이 실제 그림과 맞는지 검증 중... (시도 ${attempt}/${MAX_NARRATION_ATTEMPTS})`);
+    const issues = await verifyNarrationGrounding({ segments, imageBufferForVision, imageMediaType, apiKey, model });
+
+    if (issues.length === 0) {
+      if (attempt > 1) console.log('[anthropic]   재작성 후 검증 통과.');
+      break;
+    }
+
+    console.warn(`[anthropic]   나레이션에서 그림과 맞지 않는 주장 ${issues.length}건 발견:`);
+    for (const issue of issues) {
+      console.warn(`[anthropic]     - segment ${issue.segmentIndex}: "${issue.problemClaim}" (실제: ${issue.whatImageActuallyShows})`);
+    }
+
+    if (attempt >= MAX_NARRATION_ATTEMPTS) {
+      console.warn('[anthropic]   재시도 횟수를 다 써서, 지적된 문제가 남아있을 수 있는 채로 진행합니다 (리뷰 화면에서 한 번 더 확인하세요).');
+      break;
+    }
+
+    feedbackNote = `IMPORTANT CORRECTION NEEDED: your previous attempt included these visual claims that do NOT match the actual image — do not repeat them, and do not substitute another unverified guess; describe only what's actually visible instead:\n${issues
+      .map((i) => `- "${i.problemClaim}" — the image actually shows: ${i.whatImageActuallyShows}`)
+      .join('\n')}`;
+  }
+
+  return { youtube: normalizeYoutube(result.youtube, painting), segments };
+}
+
+const NARRATION_GROUNDING_SYSTEM_PROMPT = `You are fact-checking narration written for a YouTube Shorts video about one specific painting, to catch any sentence that asserts a concrete visual fact (a material, an object, a pose, a light source, a color, a surface texture) that is not actually visible in the attached image.
+
+This subject or composition may have been painted many times by many different artists across history. The narration writer sometimes reaches for a detail that is traditional or common for depictions of this subject in general — or simply confuses this specific painting with a different, more famous version of the same subject — rather than describing what this exact attached image actually shows. Your job is to catch exactly that failure mode.
+
+For each numbered narration segment given, decide whether it contains a specific, falsifiable visual claim, and if so, whether that claim is actually true of the attached image. Ignore claims that cannot be checked by looking (the artist's name, the date, why the painting was made, symbolic meaning/interpretation) — only flag claims about what is literally depicted (materials, objects, poses, lighting, colors, textures, composition) that contradict or are not supported by the image. Do not flag a segment just because it is vague or non-visual; only flag genuine contradictions with what you can see.
+
+You must respond by calling "report_grounding_issues" exactly once.`;
+
+/**
+ * generateNarrationForSelectedDetails()가 만든 나레이션 세그먼트(특히 bbox 크롭 검증이
+ * 없는 IDENTIFY/CONTEXT/CLOSE)에 실제 그림에 없는 구체적 시각 주장이 섞여 있는지 다시
+ * 한 번 이미지와 대조합니다. verifyCandidateDetails()는 크롭 하나 대 후보 하나를 보지만,
+ * 여기서는 전체 이미지 하나 대 나레이션 전체 문장을 한 번에 봅니다 — 포즈/구도처럼 작은
+ * 크롭 하나로는 판단하기 어려운 주장도 있기 때문입니다.
+ *
+ * API 호출 자체가 실패하면(네트워크/레이트리밋 등) 빈 배열을 돌려줘서 호출자가 그냥
+ * 다음 단계로 넘어가게 합니다 — 이 단계는 명백한 오류를 줄이는 안전망이지, 이게 실패했다고
+ * 전체 생성을 막을 정도로 중요하진 않습니다.
+ */
+async function verifyNarrationGrounding({ segments, imageBufferForVision, imageMediaType, apiKey, model }) {
+  const narrationBlock = segments
+    .map((s, i) => `${i + 1}. [${s.focus}] ${s.narration}`)
+    .join('\n\n');
+
   const body = {
     model: model || DEFAULT_MODEL,
-    max_tokens: 8192,
-    system: systemPrompt,
+    max_tokens: 1024,
+    system: NARRATION_GROUNDING_SYSTEM_PROMPT,
     messages: [
       {
         role: 'user',
@@ -549,96 +720,50 @@ You must respond by calling the "submit_narration" tool exactly once.`;
           },
           {
             type: 'text',
-            text: `Here is the painting's museum metadata:\n\n${metadataBlock}\n\nHere are the hidden details a human editor already selected for this video (do not change their regions — just write narration for them and put them in a good order):\n\n${detailsBlock}\n\nWrite the narration now.`,
+            text: `Here are the narration segments for this specific painting:\n\n${narrationBlock}\n\nFlag any segment with a visual claim not actually supported by this image.`,
           },
         ],
       },
     ],
     tools: [
       {
-        name: 'submit_narration',
-        description: 'Submit narration, ordering, and YouTube metadata for the pre-selected hidden details.',
+        name: 'report_grounding_issues',
+        description: 'Report narration segments containing visual claims not supported by the actual image.',
         input_schema: {
           type: 'object',
           properties: {
-            youtube: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                description: { type: 'string' },
-                tags: { type: 'array', items: { type: 'string' }, minItems: 8, maxItems: 15 },
-              },
-              required: ['title', 'description', 'tags'],
-            },
-            identifyNarration: { type: 'string' },
-            contextNarration: { type: 'string' },
-            reveals: {
+            issues: {
               type: 'array',
-              description: 'Every given detail id, exactly once each, in the chosen storytelling order, with its narration.',
-              minItems: selectedDetails.length,
-              maxItems: selectedDetails.length,
               items: {
                 type: 'object',
                 properties: {
-                  id: { type: 'string' },
-                  narration: { type: 'string' },
+                  segmentIndex: { type: 'integer', description: '1-based index matching the numbered list given.' },
+                  problemClaim: { type: 'string', description: 'The specific false/unsupported claim, quoted or closely paraphrased.' },
+                  whatImageActuallyShows: { type: 'string' },
                 },
-                required: ['id', 'narration'],
+                required: ['segmentIndex', 'problemClaim', 'whatImageActuallyShows'],
               },
             },
-            closeNarration: { type: 'string' },
           },
-          required: ['youtube', 'identifyNarration', 'contextNarration', 'reveals', 'closeNarration'],
+          required: ['issues'],
         },
       },
     ],
-    tool_choice: { type: 'tool', name: 'submit_narration' },
+    tool_choice: { type: 'tool', name: 'report_grounding_issues' },
   };
 
-  const data = await callClaude(body, apiKey, { label: 'Claude 대본(선택된 디테일) API' });
-  const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_narration');
-  if (!toolUse) {
-    throw new Error('Claude 응답에서 submit_narration tool 호출을 찾지 못했습니다. 응답: ' + JSON.stringify(data));
+  try {
+    const data = await callClaude(body, apiKey, { label: '나레이션 사실확인 API' });
+    const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'report_grounding_issues');
+    const issues = parseIfJsonString(toolUse?.input?.issues);
+    return Array.isArray(issues) ? issues : [];
+  } catch (err) {
+    console.warn(`[anthropic]   나레이션 사실확인 호출 실패, 건너뜁니다: ${err.message}`);
+    return [];
   }
-
-  const result = toolUse.input;
-  // reveals 배열이 문자열로 감싸져 오는 경우 — 파싱해서 정상 경로로 처리합니다.
-  result.reveals = parseIfJsonString(result.reveals);
-
-  // Claude가 id를 빠뜨리거나 중복 반환해도 죽지 않도록 방어적으로 재구성합니다 — 주어진
-  // selectedDetails 전부가, 정확히 한 번씩, 최종 segments에 반영되는 것을 보장합니다.
-  const byId = new Map(selectedDetails.map((d) => [d.id, d]));
-  const seen = new Set();
-  const reveals = [];
-  for (const r of Array.isArray(result.reveals) ? result.reveals : []) {
-    if (r && byId.has(r.id) && !seen.has(r.id) && typeof r.narration === 'string' && r.narration.trim()) {
-      reveals.push({ detail: byId.get(r.id), narration: r.narration.trim() });
-      seen.add(r.id);
-    }
-  }
-  for (const d of selectedDetails) {
-    if (!seen.has(d.id)) {
-      console.warn(`[anthropic]   Claude가 detail id "${d.id}"의 narration을 빠뜨려 teaser로 대체합니다.`);
-      reveals.push({ detail: d, narration: d.teaser });
-      seen.add(d.id);
-    }
-  }
-
-  const fullImageBbox = { x: 0, y: 0, w: 1, h: 1 };
-  const segments = [
-    { narration: result.identifyNarration, focus: '그림 전체 소개', gridPosition: 'full image', bbox: { ...fullImageBbox } },
-    { narration: result.contextNarration, focus: '배경/맥락 설명', gridPosition: 'full image', bbox: { ...fullImageBbox } },
-    ...reveals.map(({ detail, narration }) => ({
-      narration,
-      focus: detail.focus,
-      gridPosition: detail.gridPosition,
-      bbox: { ...detail.bbox },
-    })),
-    { narration: result.closeNarration, focus: '마무리', gridPosition: 'full image', bbox: { ...fullImageBbox } },
-  ];
-
-  return { youtube: normalizeYoutube(result.youtube, painting), segments };
 }
+
+
 
 /**
  * Claude(vision)에게 실제 그림 이미지 + 메타데이터를 보여주고, 숏폼 영상 대본을 받아옵니다.
