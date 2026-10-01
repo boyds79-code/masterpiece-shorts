@@ -154,6 +154,18 @@ function isActualPainting(obj) {
   return combined.includes('painting');
 }
 
+// met-api.mjs의 REGIONS(서양:동양 = 9:1)와 같은 비율을 AIC에서도 지키기 위해, department_title로
+// 대략적인 지역을 분류합니다. AIC 소장품 자체가 서양 미술 비중이 훨씬 커서, 불확실하면
+// western으로 처리합니다 — Met과 똑같이 정확한 지역 학술 분류가 목적이 아니라, 두 지역의
+// 콘텐츠 비율이 한쪽으로 쏠리지 않게 하는 실용적인 장치입니다.
+const EASTERN_DEPARTMENT_HINTS = ['asia', 'asian'];
+
+function classifyRegion(obj) {
+  const dept = (obj.department_title || '').toLowerCase();
+  if (EASTERN_DEPARTMENT_HINTS.some((hint) => dept.includes(hint))) return 'eastern';
+  return 'western';
+}
+
 // 실제로 영상 소재로 쓸 수 있는 조건을 만족하는지 검증합니다 (raw AIC 필드 기준).
 export function isUsable(obj) {
   return Boolean(
@@ -173,6 +185,7 @@ export function adaptAicObject(obj) {
   return {
     objectID: `aic:${obj.id}`,
     source: 'aic',
+    region: classifyRegion(obj),
     sourceMuseumName: 'The Art Institute of Chicago (artic.edu)',
     title: obj.title,
     artistDisplayName: obj.artist_title || (obj.artist_display || '').split('\n')[0] || 'Unknown',
@@ -199,11 +212,17 @@ export async function downloadImage(url) {
 
 // 아직 쓰지 않은 명화 하나를 고릅니다. usedIds는 'aic:' 접두어를 뗀 뒤의 숫자 id 목록
 // (painting-source.mjs가 소스별로 걸러서 넘겨줍니다).
-export async function pickUnusedAicPainting(usedIds) {
+//
+// preferredRegion을 주면(painting-source.mjs가 met-api.mjs의 pickRegionByWeight()로 뽑은
+// 지역을 그대로 넘겨줍니다) 1차로 그 지역에 맞는 작품만 찾고, 하나도 없으면 지역 상관없이
+// 아무 작품이나 채택합니다 — "비율은 최대한 지키되, 그것 때문에 아예 못 만드는 일은 없게"
+// 하려는 의도입니다.
+export async function pickUnusedAicPainting(usedIds, { preferredRegion } = {}) {
   const usedSet = new Set(usedIds.map(Number));
   const allIds = await searchCandidateIds();
   const shuffled = [...allIds].sort(() => Math.random() - 0.5);
 
+  const fallbackCandidates = [];
   for (const id of shuffled) {
     if (usedSet.has(id)) continue;
     let obj;
@@ -214,7 +233,15 @@ export async function pickUnusedAicPainting(usedIds) {
       continue;
     }
     if (!isUsable(obj)) continue;
-    return adaptAicObject(obj);
+    const adapted = adaptAicObject(obj);
+    if (!preferredRegion || adapted.region === preferredRegion) return adapted;
+    fallbackCandidates.push(adapted);
+  }
+  if (fallbackCandidates.length > 0) {
+    console.warn(
+      `[aic-api] 선호 지역(${preferredRegion})에 맞는 작품을 못 찾아, 다른 지역의 작품으로 대신합니다.`
+    );
+    return fallbackCandidates[0];
   }
   return null;
 }

@@ -12,8 +12,19 @@ const BASE = 'https://collectionapi.metmuseum.org/public/collection/v1';
 // weight는 서로 합이 1이 되지 않아도 상관없습니다(비율로 정규화해서 씀) — 여기서는
 // 사용자가 요청한 "동양 1 : 서양 9" 비율을 그대로 반영했습니다. 나중에 부서를 더
 // 추가하고 싶으면 이 객체에 항목을 늘리면 됩니다.
+//
+// 2026-10: 서양화를 European Paintings(11) 하나로만 돌리다 보니 몇 달 만에 "아직 안 쓴"
+// 하이라이트 작품이 거의 바닥나서(이미 188개 사용) 매번 western이 소진 처리되고 eastern으로만
+// 넘어가는 문제가 생겼습니다. 같은 isHighlight 큐레이션을 믿을 수 있는 다른 서양 미술 부서,
+// Robert Lehman Collection(15, 유럽 올드마스터 회화/드로잉 위주)과 Modern Art(21, 서양
+// 근현대 회화)를 추가해서 풀을 넓혔습니다. (부서 ID/표시명은 Met API /departments 엔드포인트
+// 기준, https://metmuseum.github.io/ 문서 참고.)
 const REGIONS = {
-  western: { departmentIds: [11], departmentNames: ['European Paintings'], weight: 9 },
+  western: {
+    departmentIds: [11, 15, 21],
+    departmentNames: ['European Paintings', 'The Robert Lehman Collection', 'Modern Art'],
+    weight: 9,
+  },
   eastern: { departmentIds: [6], departmentNames: ['Asian Art'], weight: 1 },
 };
 
@@ -162,7 +173,9 @@ export async function downloadImage(url) {
 }
 
 // REGIONS의 weight에 비례해서 지역 하나를 뽑습니다 (가중치 있는 랜덤 선택).
-function pickRegionByWeight() {
+// painting-source.mjs가 AIC로 넘어갈 때도 같은 서양:동양 비율(9:1)을 유지하려고 이 함수를
+// 그대로 재사용합니다 — export 해둔 이유입니다.
+export function pickRegionByWeight() {
   const entries = Object.entries(REGIONS);
   const total = entries.reduce((sum, [, r]) => sum + r.weight, 0);
   let r = Math.random() * total;

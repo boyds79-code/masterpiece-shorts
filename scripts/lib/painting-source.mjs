@@ -19,7 +19,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { pickUnusedPainting as pickUnusedMetPainting, downloadImage as downloadMetImage } from './met-api.mjs';
+import {
+  pickUnusedPainting as pickUnusedMetPainting,
+  downloadImage as downloadMetImage,
+  pickRegionByWeight,
+} from './met-api.mjs';
 import { pickUnusedAicPainting, downloadImage as downloadAicImage } from './aic-api.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
@@ -99,9 +103,14 @@ export async function pickUnusedPainting(usedIds) {
     console.warn('[painting-source] 최근 Met API 차단 기록이 있어 이번 실행은 Met을 건너뛰고 대체 소스(AIC)로 바로 진행합니다.');
   }
 
-  console.log('[painting-source] 대체 소스(Art Institute of Chicago)에서 아직 쓰지 않은 명화를 고르는 중...');
+  // met-api.mjs와 같은 서양:동양 비율(9:1)을 AIC에서도 지키려고 같은 가중치 함수로 지역을
+  // 뽑아서 넘겨줍니다 — AIC는 그 지역에 맞는 작품이 없으면 알아서 다른 지역으로 대신합니다.
+  const preferredRegion = pickRegionByWeight();
+  console.log(
+    `[painting-source] 대체 소스(Art Institute of Chicago)에서 아직 쓰지 않은 명화를 고르는 중... (선호 지역: ${preferredRegion})`
+  );
   const aicUsedIds = usedIdsForSource(usedIds, 'aic');
-  const aicObj = await pickUnusedAicPainting(aicUsedIds);
+  const aicObj = await pickUnusedAicPainting(aicUsedIds, { preferredRegion });
   if (!aicObj) {
     console.warn('[painting-source] 대체 소스(AIC)에서도 쓸 수 있는 새 작품을 찾지 못했습니다.');
     return null;
