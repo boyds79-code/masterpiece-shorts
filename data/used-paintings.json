@@ -529,13 +529,6 @@
     "videoIdMeaning": "ydmWs5uHlrQ"
   },
   {
-    "objectID": 436528,
-    "title": "Irises",
-    "artistDisplayName": "Vincent van Gogh",
-    "reservedAt": "2026-09-18T01:50:14.856Z",
-    "reservedForReview": true
-  },
-  {
     "objectID": 437056,
     "title": "Tommaso di Folco Portinari (1428–1501); Maria Portinari (Maria Maddalena Baroncelli, born 1456)",
     "artistDisplayName": "Hans Memling",
@@ -685,13 +678,6 @@
     "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is a romantic landscape painting featuring ancient ruins with dramatic lighting. While atmospheric and beautifully composed, it lacks the density of discoverable symbolic content needed for the format. There is only one small, barely visible human figure seated in the illu"
   },
   {
-    "objectID": 436504,
-    "title": "The Adoration of the Magi",
-    "artistDisplayName": "Giotto di Bondone",
-    "reservedAt": "2026-09-20T20:01:33.789Z",
-    "reservedForReview": true
-  },
-  {
     "objectID": 435621,
     "title": "Joan of Arc",
     "artistDisplayName": "Jules Bastien-Lepage",
@@ -726,13 +712,6 @@
     "skippedAt": "2026-09-21T14:41:36.114Z",
     "skipped": true,
     "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is a classical Chinese painting depicting a single camel with minimal background elements. While the painting features numerous collector's seals (red stamps) and calligraphic inscriptions, these are later additions by collectors/owners rather than original compositional e"
-  },
-  {
-    "objectID": 437790,
-    "title": "Allegory of the Planets and Continents",
-    "artistDisplayName": "Giovanni Battista Tiepolo",
-    "reservedAt": "2026-09-21T14:42:46.168Z",
-    "reservedForReview": true
   },
   {
     "objectID": 634108,
@@ -784,41 +763,6 @@
     "videoIdMeaning": "dvJAQ_jrNiU"
   },
   {
-    "objectID": 39668,
-    "title": "Old Trees, Level Distance",
-    "artistDisplayName": "Guo Xi",
-    "reservedAt": "2026-09-23T01:33:42.305Z",
-    "reservedForReview": true
-  },
-  {
-    "objectID": 436579,
-    "title": "Broken Eggs",
-    "artistDisplayName": "Jean-Baptiste Greuze",
-    "reservedAt": "2026-09-23T01:37:17.810Z",
-    "reservedForReview": true
-  },
-  {
-    "objectID": 435876,
-    "title": "Madame Cézanne (Hortense Fiquet, 1850–1922) in a Red Dress",
-    "artistDisplayName": "Paul Cézanne",
-    "reservedAt": "2026-09-23T02:56:07.384Z",
-    "reservedForReview": true
-  },
-  {
-    "objectID": 40055,
-    "title": "Emperor Xuanzong's flight to Shu",
-    "artistDisplayName": "Unidentified artist",
-    "reservedAt": "2026-09-23T03:00:59.565Z",
-    "reservedForReview": true
-  },
-  {
-    "objectID": 40447,
-    "title": "Grapevine and Squirrels",
-    "artistDisplayName": "Unidentified artist",
-    "reservedAt": "2026-09-23T03:07:08.676Z",
-    "reservedForReview": true
-  },
-  {
     "objectID": 438816,
     "title": "The Forest in Winter at Sunset",
     "artistDisplayName": "Théodore Rousseau",
@@ -839,13 +783,6 @@
     "artistDisplayName": "Georges Seurat",
     "usedAt": "2026-09-23T15:42:56.428Z",
     "videoIdMeaning": "jU1OIPv3Nuk"
-  },
-  {
-    "objectID": 436575,
-    "title": "View of Toledo",
-    "artistDisplayName": "El Greco (Domenikos Theotokopoulos)",
-    "reservedAt": "2026-09-23T15:49:17.914Z",
-    "reservedForReview": true
   },
   {
     "objectID": 436573,
@@ -890,13 +827,6 @@
     "videoIdMeaning": "vA-QzSssTDk"
   },
   {
-    "objectID": 74813,
-    "title": "Shakyamuni triad",
-    "artistDisplayName": "Unidentified artist",
-    "reservedAt": "2026-09-24T16:10:08.068Z",
-    "reservedForReview": true
-  },
-  {
     "objectID": 437299,
     "title": "Jalais Hill, Pontoise",
     "artistDisplayName": "Camille Pissarro",
@@ -917,13 +847,6 @@
     "artistDisplayName": "Guido Reni",
     "usedAt": "2026-09-24T23:49:44.968Z",
     "videoIdMeaning": "WdUTvtsWf-c"
-  },
-  {
-    "objectID": 656430,
-    "title": "Portrait of Yun Dongseom (1710–1795)",
-    "artistDisplayName": "Unidentified artist",
-    "reservedAt": "2026-09-24T23:52:02.591Z",
-    "reservedForReview": true
   },
   {
     "objectID": 436535,
