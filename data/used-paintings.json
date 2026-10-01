@@ -931,5 +931,40 @@
     "artistDisplayName": "Vincent van Gogh",
     "usedAt": "2026-09-25T00:05:45.166Z",
     "videoIdMeaning": "yJ7NPl5z5Mo"
+  },
+  {
+    "objectID": 435851,
+    "title": "The Meditation on the Passion",
+    "artistDisplayName": "Vittore Carpaccio",
+    "usedAt": "2026-09-29T06:54:54.865Z",
+    "videoIdProcess": "TGR8EAL0eeI"
+  },
+  {
+    "objectID": 435702,
+    "title": "The Horse Fair",
+    "artistDisplayName": "Rosa Bonheur",
+    "usedAt": "2026-09-29T18:42:43.810Z",
+    "videoIdProcess": "ECA2Sw9G64I"
+  },
+  {
+    "objectID": 435984,
+    "title": "Sibylle",
+    "artistDisplayName": "Camille Corot",
+    "usedAt": "2026-09-30T06:42:56.530Z",
+    "videoIdProcess": "hsZYEKopi1s"
+  },
+  {
+    "objectID": 436792,
+    "title": "The Crucifixion with Saints and a Donor",
+    "artistDisplayName": "Joos van Cleve",
+    "usedAt": "2026-09-30T18:30:04.470Z",
+    "videoIdProcess": "IBzPRAMZv1w"
+  },
+  {
+    "objectID": 436105,
+    "title": "The Death of Socrates",
+    "artistDisplayName": "Jacques Louis David",
+    "usedAt": "2026-10-01T07:15:50.877Z",
+    "videoIdProcess": "XyLX9HpHfxg"
   }
 ]

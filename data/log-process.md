@@ -41,3 +41,8 @@
 | 2026-09-21 | Circus Sideshow (Parade de cirque) | Georges Seurat | [eV6xM8tOmcM](https://studio.youtube.com/video/eV6xM8tOmcM/edit) |
 | 2026-09-21 | The Dream of the Shepherd (Der Traum des Hirten) | Ferdinand Hodler | [0tQy5rrHHlI](https://studio.youtube.com/video/0tQy5rrHHlI/edit) |
 | 2026-09-22 | Aristotle with a Bust of Homer | Rembrandt (Rembrandt van Rijn) | [duXmgX9Rn3k](https://studio.youtube.com/video/duXmgX9Rn3k/edit) |
+| 2026-09-29 | The Meditation on the Passion | Vittore Carpaccio | [TGR8EAL0eeI](https://studio.youtube.com/video/TGR8EAL0eeI/edit) |
+| 2026-09-29 | The Horse Fair | Rosa Bonheur | [ECA2Sw9G64I](https://studio.youtube.com/video/ECA2Sw9G64I/edit) |
+| 2026-09-30 | Sibylle | Camille Corot | [hsZYEKopi1s](https://studio.youtube.com/video/hsZYEKopi1s/edit) |
+| 2026-09-30 | The Crucifixion with Saints and a Donor | Joos van Cleve | [IBzPRAMZv1w](https://studio.youtube.com/video/IBzPRAMZv1w/edit) |
+| 2026-10-01 | The Death of Socrates | Jacques Louis David | [XyLX9HpHfxg](https://studio.youtube.com/video/XyLX9HpHfxg/edit) |
