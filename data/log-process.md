@@ -45,3 +45,4 @@
 | 2026-09-29 | The Horse Fair | Rosa Bonheur | [ECA2Sw9G64I](https://studio.youtube.com/video/ECA2Sw9G64I/edit) |
 | 2026-09-30 | Sibylle | Camille Corot | [hsZYEKopi1s](https://studio.youtube.com/video/hsZYEKopi1s/edit) |
 | 2026-09-30 | The Crucifixion with Saints and a Donor | Joos van Cleve | [IBzPRAMZv1w](https://studio.youtube.com/video/IBzPRAMZv1w/edit) |
+| 2026-10-01 | The Death of Socrates | Jacques Louis David | [XyLX9HpHfxg](https://studio.youtube.com/video/XyLX9HpHfxg/edit) |
