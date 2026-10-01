@@ -981,5 +981,26 @@
     "artistDisplayName": "Unidentified artist",
     "reservedAt": "2026-09-24T23:52:02.591Z",
     "reservedForReview": true
+  },
+  {
+    "objectID": "met:458967",
+    "title": "Saint Anthony the Abbot in the Wilderness",
+    "artistDisplayName": "Sano di Pietro (Ansano di Pietro di Mencio)",
+    "usedAt": "2026-10-01T13:47:37.334Z",
+    "videoIdMeaning": "rt_y8Sqxt7w"
+  },
+  {
+    "objectID": "met:458978",
+    "title": "Coronation of the Virgin",
+    "artistDisplayName": "Giovanni di Paolo (Giovanni di Paolo di Grazia)",
+    "reservedAt": "2026-10-01T15:38:24.792Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": "met:437926",
+    "title": "Mezzetin",
+    "artistDisplayName": "Antoine Watteau",
+    "usedAt": "2026-09-30T12:00:00.000Z",
+    "videoIdMeaning": "IqcdRPkY6gk"
   }
 ]
