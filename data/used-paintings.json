@@ -966,5 +966,20 @@
     "artistDisplayName": "Jacques Louis David",
     "usedAt": "2026-10-01T07:15:50.877Z",
     "videoIdProcess": "XyLX9HpHfxg"
+  },
+  {
+    "objectID": "met:436622",
+    "title": "Merrymakers at Shrovetide",
+    "artistDisplayName": "Frans Hals",
+    "usedAt": "2026-09-26T12:00:00.000Z",
+    "videoIdMeaning": "iX4-AIBlti4"
+  },
+  {
+    "objectID": "met:436440",
+    "title": "Cottage Children (The Wood Gatherers)",
+    "artistDisplayName": "Thomas Gainsborough",
+    "skippedAt": "2026-10-01T12:01:58.944Z",
+    "skipped": true,
+    "reason": "Claude가 후보 디테일을 제대로 반환하지 않았습니다: candidates가 배열이 아님 (stop_reason: tool_use, 받은 키: candidates)"
   }
 ]
