@@ -38,6 +38,26 @@ async function makeVisionCopy(originalPath, outPath) {
   ]);
 }
 
+// Wikimedia Commons 등 외부 소스의 원본 이미지가 수천만 픽셀(미술관 초고해상도 스캔본)에
+// 달하는 경우가 있습니다 — Met/AIC는 보통 이 정도로 크지 않지만, 혹시 모를 경우를 대비해
+// 소스에 관계없이 공통으로 적용합니다. 이 크기 그대로 영상 조립(video-builder.mjs)의
+// 프레임별 crop 필터에 넘기면 처리 속도가 극단적으로 느려져(실측: 83메가픽셀 이미지에서
+// 15초 분량 렌더링에 5분 넘게 걸려 FFMPEG_TIMEOUT_MS에 걸려 실패) 빌드가 실패합니다.
+// 최종 출력이 1080x1920이므로 긴 변 4000px이면 확대(bbox) 구간도 충분히 선명하게
+// 나오면서 crop 연산량은 크게 줄어듭니다. 이미 더 작은 이미지는 그대로 둡니다(min() 사용).
+async function capOriginalImageSize(imagePath) {
+  const tmpPath = imagePath + '.capped.jpg';
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i', imagePath,
+    '-vf', "scale='min(4000,iw)':'min(4000,ih)':force_original_aspect_ratio=decrease",
+    '-q:v', '2',
+    '-update', '1',
+    tmpPath,
+  ]);
+  fs.renameSync(tmpPath, imagePath);
+}
+
 // 후보 그림 하나가 (a) Claude vision이 민감한 소재(누드가 포함된 종교화/신화화 등)로 보고
 // segments를 비운 채 반환하거나, (b) 사전 적합성 심사에서 "다인물/서사/상징이 부족해 파고들
 // 디테일이 거의 없다"고 판정되는 경우가 있습니다 — 두 경우 모두 전체 실행을 실패시키는 대신
@@ -80,6 +100,7 @@ async function pickPaintingAndProduce({ workDir, produceDeliverable }) {
     visionPath = path.join(workDir, 'vision.jpg');
     const imageBuffer = await downloadImage(candidate.primaryImage);
     fs.writeFileSync(imagePath, imageBuffer);
+    await capOriginalImageSize(imagePath);
     await makeVisionCopy(imagePath, visionPath);
 
     console.log('[generate-video] Claude에게 이 그림이 포맷에 맞는 소재인지(다인물/서사/상징 밀도) 먼저 확인하는 중...');
