@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import sharp from 'sharp';
 
 import { pickUnusedPainting, downloadImage } from './lib/painting-source.mjs';
 import { generateVideoScript, generateHiddenDetailCandidates, evaluatePaintingSuitability } from './lib/anthropic.mjs';
@@ -38,24 +39,27 @@ async function makeVisionCopy(originalPath, outPath) {
   ]);
 }
 
-// Wikimedia Commons 등 외부 소스의 원본 이미지가 수천만 픽셀(미술관 초고해상도 스캔본)에
-// 달하는 경우가 있습니다 — Met/AIC는 보통 이 정도로 크지 않지만, 혹시 모를 경우를 대비해
-// 소스에 관계없이 공통으로 적용합니다. 이 크기 그대로 영상 조립(video-builder.mjs)의
-// 프레임별 crop 필터에 넘기면 처리 속도가 극단적으로 느려져(실측: 83메가픽셀 이미지에서
-// 15초 분량 렌더링에 5분 넘게 걸려 FFMPEG_TIMEOUT_MS에 걸려 실패) 빌드가 실패합니다.
-// 최종 출력이 1080x1920이므로 긴 변 4000px이면 확대(bbox) 구간도 충분히 선명하게
-// 나오면서 crop 연산량은 크게 줄어듭니다. 이미 더 작은 이미지는 그대로 둡니다(min() 사용).
-async function capOriginalImageSize(imagePath) {
-  const tmpPath = imagePath + '.capped.jpg';
-  await execFileAsync('ffmpeg', [
-    '-y',
-    '-i', imagePath,
-    '-vf', "scale='min(4000,iw)':'min(4000,ih)':force_original_aspect_ratio=decrease",
-    '-q:v', '2',
-    '-update', '1',
-    tmpPath,
-  ]);
-  fs.renameSync(tmpPath, imagePath);
+// Wikimedia Commons 등 외부 소스의 원본 이미지가 수천만~수억 픽셀(미술관 초고해상도
+// 스캔본)에 달하는 경우가 있습니다 — Met/AIC는 보통 이 정도로 크지 않지만, 혹시 모를
+// 경우를 대비해 소스에 관계없이 공통으로 적용합니다. 처음엔 ffmpeg로 줄이려 했지만,
+// ffmpeg의 mjpeg 디코더는 아주 큰 이미지(실측: The Birth of Venus 30000x18840, 약
+// 5억6500만 픽셀)는 "Picture size ... is invalid"로 아예 열지도 못해 실패했습니다
+// (반면 83메가픽셀짜리 Mona Lisa는 열 수 있었지만 프레임별 crop 처리가 5분 넘게 걸려
+// FFMPEG_TIMEOUT_MS에 걸렸습니다). sharp(libvips)는 이런 극단적으로 큰 이미지도 문제
+// 없이 디코딩하므로, ffmpeg가 원본을 한 번이라도 건드리기 전에 메모리에서 먼저 줄여
+// 디스크에 씁니다. 최종 출력이 1080x1920이므로 긴 변 4000px이면 확대(bbox) 구간도
+// 충분히 선명하게 나오면서 ffmpeg의 crop 연산량도 크게 줄어듭니다. 이미 더 작은
+// 이미지는 그대로 둡니다(withoutEnlargement).
+const MAX_IMAGE_DIMENSION = 4000;
+
+async function capImageBuffer(buffer) {
+  // limitInputPixels: false — sharp 기본값(약 2억6800만 픽셀)보다 큰, 정상적인
+  // 퍼블릭 도메인 초고해상도 스캔본을 악성 "디콤프레션 폭탄"으로 오인해 거부하지
+  // 않도록 끕니다.
+  return sharp(buffer, { limitInputPixels: false })
+    .resize(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 92 })
+    .toBuffer();
 }
 
 // 후보 그림 하나가 (a) Claude vision이 민감한 소재(누드가 포함된 종교화/신화화 등)로 보고
@@ -98,10 +102,26 @@ async function pickPaintingAndProduce({ workDir, produceDeliverable }) {
 
     imagePath = path.join(workDir, 'original.jpg');
     visionPath = path.join(workDir, 'vision.jpg');
-    const imageBuffer = await downloadImage(candidate.primaryImage);
-    fs.writeFileSync(imagePath, imageBuffer);
-    await capOriginalImageSize(imagePath);
-    await makeVisionCopy(imagePath, visionPath);
+    try {
+      const imageBuffer = await downloadImage(candidate.primaryImage);
+      const cappedBuffer = await capImageBuffer(imageBuffer);
+      fs.writeFileSync(imagePath, cappedBuffer);
+      await makeVisionCopy(imagePath, visionPath);
+    } catch (err) {
+      console.warn(`[generate-video] "${candidate.title}" 이미지 처리(다운로드/리사이즈) 실패, 건너뛰고 다음 후보로 넘어갑니다: ${err.message}`);
+      usedList.push({
+        objectID: candidate.objectID,
+        title: candidate.title,
+        artistDisplayName: candidate.artistDisplayName,
+        skippedAt: new Date().toISOString(),
+        skipped: true,
+        reason: `[이미지 처리 실패] ${err.message}`.slice(0, 300),
+      });
+      saveUsed(usedList);
+      fs.rmSync(imagePath, { force: true });
+      fs.rmSync(visionPath, { force: true });
+      continue;
+    }
 
     console.log('[generate-video] Claude에게 이 그림이 포맷에 맞는 소재인지(다인물/서사/상징 밀도) 먼저 확인하는 중...');
     let suitability;
