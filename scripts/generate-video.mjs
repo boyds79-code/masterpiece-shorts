@@ -69,6 +69,18 @@ async function capImageBuffer(buffer) {
 // 적합성 심사로 거절되는 그림이 늘어난 만큼 시도 횟수를 4 -> 6으로 늘립니다.
 const MAX_PAINTING_ATTEMPTS = 6;
 
+// 이미지 다운로드/리사이즈 실패(네트워크 순단, 메모리 부족 등으로 추정되는 "terminated"
+// 같은 에러)는 소재 부적합과 달리 "진짜로 이 그림을 쓸 수 없다"는 판단이 아니라, 그날의
+// 일시적인 자원/네트워크 상태 때문일 수 있습니다. 그래서 소재 부적합(영구 제외)과 분리해서
+// transient: true로 기록하고, 아래 횟수만큼은 이후 실행에서 다시 뽑힐 기회를 줍니다. 이
+// 횟수를 다 채우고도 계속 실패하면(=진짜로 처리 불가능한 파일일 가능성이 높음) 그때
+// 비로소 영구 제외로 전환합니다.
+const MAX_TRANSIENT_RETRIES = 3;
+
+function isRetryableTransient(entry) {
+  return entry.transient === true && (entry.transientFailCount || 0) < MAX_TRANSIENT_RETRIES;
+}
+
 /**
  * 아직 안 쓴 그림을 하나 고르고, 소재가 단조롭거나 민감해서 거절되는 그림은 건너뛰면서
  * produceDeliverable()에게 최종 결과물을 맡기는 공통 재시도 루프입니다.
@@ -84,14 +96,20 @@ const MAX_PAINTING_ATTEMPTS = 6;
  */
 async function pickPaintingAndProduce({ workDir, produceDeliverable }) {
   const usedList = loadUsed();
+  // 지난 실행에서 "일시적 이미지 처리 실패"로 건너뛴 그림 중 아직 재시도 횟수가 남은
+  // 것은, 이번 실행의 제외 목록에서 빼서 다시 뽑힐 수 있게 합니다(소재 부적합/영구 제외
+  // 판정은 그대로 유지됩니다). 이번 실행 중에 뽑혔다가 또 실패하면 바로 아래에서 다시
+  // 제외 목록에 추가되므로, 같은 실행 안에서 같은 그림이 반복해서 뽑히지는 않습니다.
+  const excludedIds = new Set(
+    usedList.filter((u) => !isRetryableTransient(u)).map((u) => u.objectID)
+  );
   let painting = null;
   let deliverable = null;
   let imagePath, visionPath;
 
   for (let attempt = 1; attempt <= MAX_PAINTING_ATTEMPTS; attempt++) {
     console.log(`[generate-video] 아직 쓰지 않은 명화를 고르는 중... Met 우선, 차단 시 AIC로 자동 전환 (시도 ${attempt}/${MAX_PAINTING_ATTEMPTS})`);
-    const usedIds = usedList.map((u) => u.objectID);
-    const candidate = await pickUnusedPainting(usedIds);
+    const candidate = await pickUnusedPainting(Array.from(excludedIds));
 
     if (!candidate) {
       console.log('[generate-video] Met과 대체 소스(AIC) 모두에서 쓸 수 있는 새 작품을 찾지 못했습니다. scripts/lib/met-api.mjs의 REGIONS에 부서를 추가하는 것을 고려하세요.');
@@ -99,6 +117,7 @@ async function pickPaintingAndProduce({ workDir, produceDeliverable }) {
     }
 
     console.log(`[generate-video] 선정: "${candidate.title}" — ${candidate.artistDisplayName} (${candidate.objectDate})`);
+    excludedIds.add(candidate.objectID); // 이번 실행 중에는 같은 그림을 다시 뽑지 않습니다.
 
     imagePath = path.join(workDir, 'original.jpg');
     visionPath = path.join(workDir, 'vision.jpg');
@@ -108,15 +127,24 @@ async function pickPaintingAndProduce({ workDir, produceDeliverable }) {
       fs.writeFileSync(imagePath, cappedBuffer);
       await makeVisionCopy(imagePath, visionPath);
     } catch (err) {
-      console.warn(`[generate-video] "${candidate.title}" 이미지 처리(다운로드/리사이즈) 실패, 건너뛰고 다음 후보로 넘어갑니다: ${err.message}`);
-      usedList.push({
+      const prevEntry = usedList.find((u) => u.objectID === candidate.objectID && u.transient === true);
+      const transientFailCount = (prevEntry?.transientFailCount || 0) + 1;
+      const isNowPermanent = transientFailCount >= MAX_TRANSIENT_RETRIES;
+      console.warn(
+        `[generate-video] "${candidate.title}" 이미지 처리(다운로드/리사이즈) 실패(${transientFailCount}/${MAX_TRANSIENT_RETRIES}회째)` +
+          `${isNowPermanent ? ' — 재시도 횟수를 넘겨 이번부터 영구 제외합니다' : ' — 일시 제외로 기록해 다음 실행에서 다시 시도될 수 있게 합니다'}: ${err.message}`
+      );
+      const entry = {
         objectID: candidate.objectID,
         title: candidate.title,
         artistDisplayName: candidate.artistDisplayName,
         skippedAt: new Date().toISOString(),
         skipped: true,
-        reason: `[이미지 처리 실패] ${err.message}`.slice(0, 300),
-      });
+        ...(isNowPermanent ? {} : { transient: true, transientFailCount }),
+        reason: `[이미지 처리 실패${isNowPermanent ? ` · ${transientFailCount}회 반복으로 영구 제외` : ''}] ${err.message}`.slice(0, 300),
+      };
+      const idx = usedList.findIndex((u) => u.objectID === candidate.objectID);
+      if (idx >= 0) usedList[idx] = entry; else usedList.push(entry);
       saveUsed(usedList);
       fs.rmSync(imagePath, { force: true });
       fs.rmSync(visionPath, { force: true });

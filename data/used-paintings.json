@@ -1075,5 +1075,22 @@
     "skippedAt": "2026-10-02T04:16:43.525Z",
     "skipped": true,
     "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is Vermeer's \"Girl with a Pearl Earring\" - a classic single-sitter portrait bust showing only the subject's head, shoulders, and upper torso against a plain dark background. While it's an iconic and beloved painting, it lacks the density of discoverable material needed for"
+  },
+  {
+    "objectID": "wiki:botticelli-the-birth-of-venus",
+    "title": "The Birth of Venus",
+    "artistDisplayName": "Sandro Botticelli",
+    "skippedAt": "2026-10-02T10:07:03.075Z",
+    "skipped": true,
+    "reason": "[이미지 처리 실패] terminated",
+    "transient": true,
+    "transientFailCount": 1
+  },
+  {
+    "objectID": "wiki:rembrandt-the-night-watch",
+    "title": "The Night Watch",
+    "artistDisplayName": "Rembrandt van Rijn",
+    "reservedAt": "2026-10-02T10:08:33.499Z",
+    "reservedForReview": true
   }
 ]
