@@ -109,3 +109,6 @@
 | 2026-09-30 | Maharana Sangram Singh Riding a Prize Stallion | Stipple Master | [hz7gsY-hUpk](https://studio.youtube.com/video/hz7gsY-hUpk/edit) |
 | 2026-10-01 | Saint Anthony the Abbot in the Wilderness | Sano di Pietro (Ansano di Pietro di Mencio) | [rt_y8Sqxt7w](https://studio.youtube.com/video/rt_y8Sqxt7w/edit) |
 | 2026-10-01 | The Penitent Magdalen | Georges de La Tour | [4ItzSY7e15c](https://studio.youtube.com/video/4ItzSY7e15c/edit) |
+| 2026-10-02 | The Kiss | Gustav Klimt | [sfhffgdDziw](https://studio.youtube.com/video/sfhffgdDziw/edit) |
+| 2026-10-02 | Mona Lisa | Leonardo da Vinci | [PkN027yTox4](https://studio.youtube.com/video/PkN027yTox4/edit) |
+| 2026-10-02 | The Scream | Edvard Munch | [xsezXbsUBEI](https://studio.youtube.com/video/xsezXbsUBEI/edit) |

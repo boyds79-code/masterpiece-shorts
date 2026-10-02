@@ -1050,7 +1050,30 @@
     "objectID": "wiki:da-vinci-mona-lisa",
     "title": "Mona Lisa",
     "artistDisplayName": "Leonardo da Vinci",
-    "usedAt": "2026-10-02T07:06:12.362Z",
+    "usedAt": "2026-10-02T02:57:14.299Z",
+    "videoIdMeaning": "PkN027yTox4",
     "videoIdProcess": "7QqtUOkmSLs"
+  },
+  {
+    "objectID": "wiki:klimt-the-kiss",
+    "title": "The Kiss",
+    "artistDisplayName": "Gustav Klimt",
+    "usedAt": "2026-10-02T02:45:23.075Z",
+    "videoIdMeaning": "sfhffgdDziw"
+  },
+  {
+    "objectID": "wiki:munch-the-scream",
+    "title": "The Scream",
+    "artistDisplayName": "Edvard Munch",
+    "usedAt": "2026-10-02T03:13:16.181Z",
+    "videoIdMeaning": "xsezXbsUBEI"
+  },
+  {
+    "objectID": "wiki:vermeer-girl-with-a-pearl-earring",
+    "title": "Girl with a Pearl Earring",
+    "artistDisplayName": "Johannes Vermeer",
+    "skippedAt": "2026-10-02T04:16:43.525Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is Vermeer's \"Girl with a Pearl Earring\" - a classic single-sitter portrait bust showing only the subject's head, shoulders, and upper torso against a plain dark background. While it's an iconic and beloved painting, it lacks the density of discoverable material needed for"
   }
 ]
