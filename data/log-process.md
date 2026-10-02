@@ -47,3 +47,4 @@
 | 2026-09-30 | The Crucifixion with Saints and a Donor | Joos van Cleve | [IBzPRAMZv1w](https://studio.youtube.com/video/IBzPRAMZv1w/edit) |
 | 2026-10-01 | The Death of Socrates | Jacques Louis David | [XyLX9HpHfxg](https://studio.youtube.com/video/XyLX9HpHfxg/edit) |
 | 2026-10-01 | Devananda's Fourteen Auspicious Dreams Foretelling the Birth of Mahavira: Folio from a Kalpasutra Manuscript | Master of the Jaunpur Kalpasutra | [ckuGe39nsR0](https://studio.youtube.com/video/ckuGe39nsR0/edit) |
+| 2026-10-02 | Mona Lisa | Leonardo da Vinci | [7QqtUOkmSLs](https://studio.youtube.com/video/7QqtUOkmSLs/edit) |

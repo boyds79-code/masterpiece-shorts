@@ -1045,5 +1045,12 @@
     "artistDisplayName": "Ugolino da Siena (Ugolino di Nerio)",
     "reservedAt": "2026-10-02T00:23:24.496Z",
     "reservedForReview": true
+  },
+  {
+    "objectID": "wiki:da-vinci-mona-lisa",
+    "title": "Mona Lisa",
+    "artistDisplayName": "Leonardo da Vinci",
+    "usedAt": "2026-10-02T07:06:12.362Z",
+    "videoIdProcess": "7QqtUOkmSLs"
   }
 ]
