@@ -1009,5 +1009,41 @@
     "artistDisplayName": "Master of the Jaunpur Kalpasutra",
     "usedAt": "2026-10-01T18:55:56.912Z",
     "videoIdProcess": "ckuGe39nsR0"
+  },
+  {
+    "objectID": "met:436839",
+    "title": "The Penitent Magdalen",
+    "artistDisplayName": "Georges de La Tour",
+    "usedAt": "2026-10-01T23:36:26.319Z",
+    "videoIdMeaning": "4ItzSY7e15c"
+  },
+  {
+    "objectID": "met:458998",
+    "title": "The Assumption of the Virgin",
+    "artistDisplayName": "Bernardo Daddi",
+    "reservedAt": "2026-10-01T23:53:58.183Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": "met:459084",
+    "title": "Margaretha van Haexbergen (1614–1676)",
+    "artistDisplayName": "Gerard ter Borch the Younger",
+    "skippedAt": "2026-10-02T00:19:06.333Z",
+    "skipped": true,
+    "reason": "[낮은 서사/상징 밀도, 인물 수 1] This is a straightforward single-figure portrait of a woman in Dutch 17th-century dress standing beside a red velvet chair against a plain, dark background. While the painting shows careful attention to clothing details (black dress with gray/white trim at collar and cuffs) and"
+  },
+  {
+    "objectID": "met:437835",
+    "title": "The Englishman (William Tom Warrener, 1861–1934) at the Moulin Rouge",
+    "artistDisplayName": "Henri de Toulouse-Lautrec",
+    "reservedAt": "2026-10-02T00:21:38.746Z",
+    "reservedForReview": true
+  },
+  {
+    "objectID": "met:459131",
+    "title": "The Last Supper",
+    "artistDisplayName": "Ugolino da Siena (Ugolino di Nerio)",
+    "reservedAt": "2026-10-02T00:23:24.496Z",
+    "reservedForReview": true
   }
 ]

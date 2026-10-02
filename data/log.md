@@ -80,3 +80,32 @@
 | 2026-09-24 | Marie Emilie Coignet de Courson (1716–1806) with a Dog | Jean Honoré Fragonard | [hzyN8LwQ6Co](https://studio.youtube.com/video/hzyN8LwQ6Co/edit) |
 | 2026-09-24 | The Immaculate Conception | Guido Reni | [WdUTvtsWf-c](https://studio.youtube.com/video/WdUTvtsWf-c/edit) |
 | 2026-09-25 | Wheat Field with Cypresses | Vincent van Gogh | [yJ7NPl5z5Mo](https://studio.youtube.com/video/yJ7NPl5z5Mo/edit) |
+| 2026-09-25 | The Penitence of Saint Jerome | Joachim Patinir | [yHccYUKiqSo](https://studio.youtube.com/video/yHccYUKiqSo/edit) |
+| 2026-09-25 | Hagar in the Wilderness | Camille Corot | [ZrqJpbJXxjU](https://studio.youtube.com/video/ZrqJpbJXxjU/edit) |
+| 2026-09-26 | The Musicians | Caravaggio (Michelangelo Merisi) | [OCzoFV_0xfU](https://studio.youtube.com/video/OCzoFV_0xfU/edit) |
+| 2026-09-26 | Woman with a Parrot | Gustave Courbet | [pzNSOTP0v1s](https://studio.youtube.com/video/pzNSOTP0v1s/edit) |
+| 2026-09-26 | The Spanish Singer | Edouard Manet | [NOFqEWJSpNA](https://studio.youtube.com/video/NOFqEWJSpNA/edit) |
+| 2026-09-26 | Merrymakers at Shrovetide | Frans Hals | [iX4-AIBlti4](https://studio.youtube.com/video/iX4-AIBlti4/edit) |
+| 2026-09-26 | The Toilette of Venus | François Boucher | [28O-DqJFzHI](https://studio.youtube.com/video/28O-DqJFzHI/edit) |
+| 2026-09-26 | The Crucifixion with Saints and a Donor | Joos van Cleve | [_nw1ZHxVigk](https://studio.youtube.com/video/_nw1ZHxVigk/edit) |
+| 2026-09-26 | Haystacks: Autumn | Jean-François Millet | [YJHNQKbbOws](https://studio.youtube.com/video/YJHNQKbbOws/edit) |
+| 2026-09-26 | The Crucifixion; The Last Judgment | Jan van Eyck | [C9c8DI-FL9o](https://studio.youtube.com/video/C9c8DI-FL9o/edit) |
+| 2026-09-27 | The Englishman (William Tom Warrener, 1861–1934) at the Moulin Rouge | Henri de Toulouse-Lautrec | [qrgJbsEpWYw](https://studio.youtube.com/video/qrgJbsEpWYw/edit) |
+| 2026-09-27 | The Death of Socrates | Jacques Louis David | [7BW8VuXQcb8](https://studio.youtube.com/video/7BW8VuXQcb8/edit) |
+| 2026-09-27 | Venus and Cupid | Lorenzo Lotto | [EvVmIb9eUks](https://studio.youtube.com/video/EvVmIb9eUks/edit) |
+| 2026-09-27 | The Coronation of the Virgin | Annibale Carracci | [FPHCnpz9xvY](https://studio.youtube.com/video/FPHCnpz9xvY/edit) |
+| 2026-09-27 | Lucas van Uffel (died 1637) | Anthony van Dyck | [nkkOQatsUfg](https://studio.youtube.com/video/nkkOQatsUfg/edit) |
+| 2026-09-27 | Portrait of a Carthusian | Petrus Christus | [kAkDbxJgKtc](https://studio.youtube.com/video/kAkDbxJgKtc/edit) |
+| 2026-09-28 | Virgin and Child with Saint Anne | Albrecht Dürer | [XgllOkfkgY8](https://studio.youtube.com/video/XgllOkfkgY8/edit) |
+| 2026-09-28 | Elizabeth Farren (born about 1759, died 1829), Later Countess of Derby | Sir Thomas Lawrence | [VEAGjFxVrYg](https://studio.youtube.com/video/VEAGjFxVrYg/edit) |
+| 2026-09-28 | Blind Orion Searching for the Rising Sun | Nicolas Poussin | [klUrM3Axc0A](https://studio.youtube.com/video/klUrM3Axc0A/edit) |
+| 2026-09-28 | The Crucifixion | Pietro Lorenzetti | [VosJUj6IOH4](https://studio.youtube.com/video/VosJUj6IOH4/edit) |
+| 2026-09-28 | Madonna and Child | Duccio di Buoninsegna | [v2A-ajpn1fs](https://studio.youtube.com/video/v2A-ajpn1fs/edit) |
+| 2026-09-29 | Comtesse de la Châtre (Marie Charlotte Louise Perrette Aglaé Bontemps, 1762–1848) | Elisabeth Louise Vigée Le Brun | [O7eRon0bvB8](https://studio.youtube.com/video/O7eRon0bvB8/edit) |
+| 2026-09-29 | Mezzetin | Antoine Watteau | [IqcdRPkY6gk](https://studio.youtube.com/video/IqcdRPkY6gk/edit) |
+| 2026-09-29 | The Judgment of Paris | Lucas Cranach the Elder | [oqBtWfafrFM](https://studio.youtube.com/video/oqBtWfafrFM/edit) |
+| 2026-09-30 | Madonna and Child Enthroned with Saints | Raphael (Raffaello Sanzio or Santi) | [Wp4n8XxKYGE](https://studio.youtube.com/video/Wp4n8XxKYGE/edit) |
+| 2026-09-30 | The Rest on the Flight into Egypt | Gerard David | [ikAop-m8yy4](https://studio.youtube.com/video/ikAop-m8yy4/edit) |
+| 2026-09-30 | Maharana Sangram Singh Riding a Prize Stallion | Stipple Master | [hz7gsY-hUpk](https://studio.youtube.com/video/hz7gsY-hUpk/edit) |
+| 2026-10-01 | Saint Anthony the Abbot in the Wilderness | Sano di Pietro (Ansano di Pietro di Mencio) | [rt_y8Sqxt7w](https://studio.youtube.com/video/rt_y8Sqxt7w/edit) |
+| 2026-10-01 | The Penitent Magdalen | Georges de La Tour | [4ItzSY7e15c](https://studio.youtube.com/video/4ItzSY7e15c/edit) |
