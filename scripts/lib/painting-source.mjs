@@ -1,10 +1,17 @@
-// Met API(기본 소스)와 AIC API(대체 소스)를 하나의 창구로 묶어주는 모듈.
+// 큐레이션 유명작 목록(신규) → Met API(기본 소스) → AIC API(대체 소스) 순으로 시도해서
+// 하나의 창구로 묶어주는 모듈.
 // scripts/generate-video.mjs, generate-process-video.mjs, generate-longform-video.mjs는
 // 이제 scripts/lib/met-api.mjs를 직접 쓰지 않고 이 파일의 pickUnusedPainting/downloadImage를
 // 씁니다.
 //
-// 왜 필요한가: Met API가 짧은 기간에 여러 번 403(MET_BLOCKED)을 반환하면, 그 시점부터
-// 한동안(보통 30분~몇 시간) 같은 IP의 요청이 계속 막힐 가능성이 큽니다. 그 상태에서
+// 왜 유명작 목록이 맨 앞인가: Met/AIC는 공식 API로 접근 가능한 소장품 안에서만 고를 수
+// 있어서, 사람들이 실제로 가장 많이 아는 명화 중 상당수(예: 클림트의 "키스", 다빈치의
+// "모나리자")는 애초에 그 두 소장처에 없습니다. data/famous-paintings.json에 손으로
+// 큐레이션해둔 목록을 먼저 소진해서 화제성을 빨리 만들고, 그 목록을 다 쓰면 아래 Met/AIC
+// 자동 선정으로 넘어갑니다. 자세한 내용은 scripts/lib/famous-api.mjs 참고.
+//
+// 왜 Met/AIC 전환이 필요한가: Met API가 짧은 기간에 여러 번 403(MET_BLOCKED)을 반환하면, 그
+// 시점부터 한동안(보통 30분~몇 시간) 같은 IP의 요청이 계속 막힐 가능성이 큽니다. 그 상태에서
 // 자동 스케줄이나 사람이 계속 재시도하면 오히려 차단이 길어질 수 있고, 무엇보다 그동안
 // 영상을 하나도 만들 수 없습니다. 그래서:
 //   1. Met이 MET_BLOCKED로 실패하면, data/.met-status.json에 "언제까지 Met을 쉴지"를
@@ -25,6 +32,7 @@ import {
   pickRegionByWeight,
 } from './met-api.mjs';
 import { pickUnusedAicPainting, downloadImage as downloadAicImage } from './aic-api.mjs';
+import { pickUnusedFamousPainting, downloadImage as downloadFamousImage } from './famous-api.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const STATUS_PATH = path.join(ROOT, 'data', '.met-status.json');
@@ -64,10 +72,11 @@ function clearMetCooldownIfSet() {
   if (status.blockedUntil) writeMetStatus({ blockedUntil: null });
 }
 
-// data/used-paintings.json의 objectID는 두 가지 형태가 섞여 있을 수 있습니다:
+// data/used-paintings.json의 objectID는 세 가지 형태가 섞여 있을 수 있습니다:
 //   - 접두어 없는 순수 숫자(문자열/숫자) — 이 기능을 추가하기 전, Met 전용이던 시절 기록.
-//   - 'met:12345' / 'aic:6789' — 이 기능 이후 새로 저장되는 형태.
-// 소스별로 걸러서 각 API가 이해하는 숫자 id 배열로 변환합니다.
+//   - 'met:12345' / 'aic:6789' — Met/AIC 구분이 생긴 이후 저장되는 형태(숫자 id).
+//   - 'wiki:klimt-the-kiss' — 유명작 큐레이션 목록 전용(숫자가 아닌 문자열 slug id).
+// 소스별로 걸러서 각 소스가 이해하는 id 배열로 변환합니다.
 function usedIdsForSource(usedIds, source) {
   const prefix = `${source}:`;
   return usedIds
@@ -82,7 +91,28 @@ function usedIdsForSource(usedIds, source) {
     });
 }
 
+// 'wiki:' 접두어 id는 met/aic와 달리 숫자가 아닌 문자열 slug라서, 위 usedIdsForSource와는
+// 별도로 Number 변환 없이 그대로 걸러냅니다.
+function usedWikiIds(usedIds) {
+  const prefix = 'wiki:';
+  return usedIds.filter((id) => String(id).startsWith(prefix)).map((id) => String(id).slice(prefix.length));
+}
+
 export async function pickUnusedPainting(usedIds) {
+  // 0단계: 손으로 큐레이션한 유명작 목록을 가장 먼저 시도합니다 — 화제성을 빨리 만들기
+  // 위해, Met/AIC 자동 선정보다 우선합니다. 목록을 다 쓰면 자연히 아래로 넘어갑니다.
+  try {
+    const famousWikiIds = usedWikiIds(usedIds);
+    const famousObj = await pickUnusedFamousPainting(famousWikiIds);
+    if (famousObj) {
+      console.log(`[painting-source] 유명 작품 큐레이션 목록에서 선정: "${famousObj.title}" — ${famousObj.artistDisplayName}`);
+      return famousObj;
+    }
+    console.log('[painting-source] 유명 작품 큐레이션 목록을 모두 사용했습니다 — Met/AIC 자동 선정으로 진행합니다.');
+  } catch (err) {
+    console.warn(`[painting-source] 유명 작품 큐레이션 목록 조회 실패, Met/AIC 자동 선정으로 넘어갑니다: ${err.message}`);
+  }
+
   if (!isMetInCooldown()) {
     try {
       const metUsedIds = usedIdsForSource(usedIds, 'met');
@@ -120,5 +150,6 @@ export async function pickUnusedPainting(usedIds) {
 
 export async function downloadImage(url) {
   if (url.includes('metmuseum.org')) return downloadMetImage(url);
+  if (url.includes('wikimedia.org')) return downloadFamousImage(url);
   return downloadAicImage(url);
 }
