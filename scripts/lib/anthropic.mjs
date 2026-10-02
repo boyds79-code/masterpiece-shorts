@@ -252,6 +252,123 @@ For each candidate:
 
 You must respond by calling "submit_candidates" exactly once.`;
 
+// 검증 단계(verifyCandidateDetails)에서 "실제로 없다"고 판정된 후보는 통째로 버려지므로,
+// 원래 6~10개를 받아도 등장인물/구성 요소가 많고 복잡한 그림(예: "야경")일수록 절반 이상
+// 탈락해 사람이 고를 폭이 너무 좁아지는 경우가 있었습니다(실제로 겪은 사례: 7개 중 3개만
+// 생존). 검증 통과분이 이 숫자보다 적으면, 이미 제안했던 것과 겹치지 않는 새 후보를 추가로
+// 더 요청해서 보충합니다.
+const MIN_DESIRED_CANDIDATES = 5;
+const MAX_BACKFILL_ROUNDS = 2;
+
+// generateHiddenDetailCandidates()의 1차 요청과 보충 요청(requestMoreCandidates)이 공유하는,
+// Claude 응답의 raw candidate 하나를 화면에 쓸 수 있는 형태로 정규화하는 로직입니다.
+function normalizeRawCandidate(c, id) {
+  const candidate = {
+    id,
+    focus: c.focus,
+    focusKo: c.focusKo || c.focus,
+    gridPosition: c.gridPosition,
+    bbox: clampBbox(parseIfJsonString(c.bbox)),
+    teaser: c.teaser,
+    teaserKo: c.teaserKo || c.teaser,
+    recommended: !!c.recommended,
+  };
+  reconcileBboxWithGridPosition(candidate); // bbox가 gridPosition 라벨과 어긋나면 여기서 바로 보정
+  return candidate;
+}
+
+function buildSubmitCandidatesTool({ minItems, maxItems }) {
+  return {
+    name: 'submit_candidates',
+    description: 'Submit candidate hidden-meaning details for a human to screen before the final script is written.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        candidates: {
+          type: 'array',
+          minItems,
+          maxItems,
+          items: {
+            type: 'object',
+            properties: {
+              focus: { type: 'string' },
+              focusKo: { type: 'string', description: 'Natural Korean translation of focus, for the screening screen.' },
+              gridPosition: { type: 'string' },
+              bbox: {
+                type: 'object',
+                properties: {
+                  x: { type: 'number' },
+                  y: { type: 'number' },
+                  w: { type: 'number' },
+                  h: { type: 'number' },
+                },
+                required: ['x', 'y', 'w', 'h'],
+              },
+              teaser: { type: 'string' },
+              teaserKo: { type: 'string', description: 'Natural, fluent Korean translation of teaser, for the screening screen.' },
+              recommended: { type: 'boolean' },
+            },
+            required: ['focus', 'focusKo', 'gridPosition', 'bbox', 'teaser', 'teaserKo', 'recommended'],
+          },
+        },
+      },
+      required: ['candidates'],
+    },
+  };
+}
+
+/**
+ * 검증 통과분이 MIN_DESIRED_CANDIDATES에 못 미칠 때, 이미 제안했던 focus 라벨을 피해서
+ * 새 후보를 추가로 요청합니다. 요청 자체가 실패하거나(네트워크 등) 배열이 아닌 응답이
+ * 오면 빈 배열을 반환해서 전체 실행을 멈추지 않고 지금까지 모은 후보만으로 진행하게
+ * 합니다.
+ */
+async function requestMoreCandidates({ metadataBlock, imageBufferForVision, imageMediaType, apiKey, model, avoidFocuses, nextIdStart }) {
+  const avoidText = avoidFocuses.length > 0
+    ? `\n\nYou already proposed these in a previous round for this same painting (some were later confirmed as not actually visible in the image and rejected, others are just already covered) — propose DIFFERENT details this time, not reworded repeats of any of these:\n${avoidFocuses.map((f) => `- ${f}`).join('\n')}`
+    : '';
+
+  const body = {
+    model: model || DEFAULT_MODEL,
+    max_tokens: 8192,
+    system: CANDIDATE_DETAILS_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: imageMediaType,
+              data: imageBufferForVision.toString('base64'),
+            },
+          },
+          {
+            type: 'text',
+            text: `Here is the painting's museum metadata:\n\n${metadataBlock}\n\nPropose the candidate hidden-meaning details now.${avoidText}`,
+          },
+        ],
+      },
+    ],
+    tools: [buildSubmitCandidatesTool({ minItems: 3, maxItems: 8 })],
+    tool_choice: { type: 'tool', name: 'submit_candidates' },
+  };
+
+  let rawExtra;
+  try {
+    const data = await callClaude(body, apiKey, { label: 'Claude 후보 디테일 보충 API' });
+    const toolUse = data.content?.find((block) => block.type === 'tool_use' && block.name === 'submit_candidates');
+    rawExtra = parseIfJsonString(toolUse?.input?.candidates);
+  } catch (err) {
+    console.warn(`[anthropic]   후보 보충 요청 실패, 지금까지 모은 후보만으로 진행합니다: ${err.message}`);
+    return [];
+  }
+  if (!Array.isArray(rawExtra)) return [];
+
+  return rawExtra.map((c, i) => normalizeRawCandidate(c, `d${nextIdStart + i + 1}`));
+}
+
 /**
  * 그림 하나에 대해 "숨은 의미" 후보 디테일을 6~10개 뽑습니다 (최종 나레이션은 아직 없음).
  * 사람이 이 중 몇 개를 고르면, 그 선택으로 generateVideoScript()를 다시 불러서 최종
@@ -357,20 +474,7 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
     throw Object.assign(new Error(`Claude가 후보 디테일을 제대로 반환하지 않았습니다: ${lastProblem}`), { code: 'CONTENT_REFUSAL' });
   }
 
-  const candidates = rawCandidates.map((c, i) => {
-    const candidate = {
-      id: `d${i + 1}`,
-      focus: c.focus,
-      focusKo: c.focusKo || c.focus,
-      gridPosition: c.gridPosition,
-      bbox: clampBbox(parseIfJsonString(c.bbox)),
-      teaser: c.teaser,
-      teaserKo: c.teaserKo || c.teaser,
-      recommended: !!c.recommended,
-    };
-    reconcileBboxWithGridPosition(candidate); // bbox가 gridPosition 라벨과 어긋나면 여기서 바로 보정
-    return candidate;
-  });
+  const candidates = rawCandidates.map((c, i) => normalizeRawCandidate(c, `d${i + 1}`));
 
   // 사람이 고르기 전에, 각 후보가 실제로 그림에 있는 디테일인지 한 번 더 검증합니다.
   // 위 프롬프트에서 "텍스트북 도상학을 가정하지 말라"고 이미 지시했지만, 그것만으로는
@@ -379,8 +483,37 @@ export async function generateHiddenDetailCandidates({ painting, imageBufferForV
   // 보여주고 "진짜 보이느냐"만 판정하게 하면, 이런 상상 속 디테일을 사람이 보기 전에
   // 걸러낼 수 있습니다.
   console.log(`[anthropic]   후보 디테일 ${candidates.length}개가 실제로 그림에 있는지 검증 중...`);
-  const verifiedCandidates = await verifyCandidateDetails({ candidates, imageBufferForVision, imageMediaType, apiKey, model });
+  let verifiedCandidates = await verifyCandidateDetails({ candidates, imageBufferForVision, imageMediaType, apiKey, model });
   console.log(`[anthropic]   검증 통과 ${verifiedCandidates.length}/${candidates.length}개`);
+
+  // 등장인물/구성 요소가 많고 복잡한 그림(예: "야경")일수록 검증 단계에서 절반 이상
+  // 탈락해 사람이 고를 폭이 너무 좁아지는 경우가 있었습니다. 통과분이 부족하면, 이미
+  // 제안했던 것과 겹치지 않는 새 후보를 추가로 요청해서 보충합니다(최대 MAX_BACKFILL_ROUNDS회).
+  let allIds = candidates.map((c) => c.id);
+  let allFocuses = candidates.map((c) => c.focus);
+  for (let round = 1; round <= MAX_BACKFILL_ROUNDS && verifiedCandidates.length < MIN_DESIRED_CANDIDATES; round++) {
+    console.log(`[anthropic]   검증 통과한 후보가 ${verifiedCandidates.length}개뿐이라 추가로 더 요청합니다 (보충 ${round}/${MAX_BACKFILL_ROUNDS}회차)...`);
+    const nextIdStart = allIds.length;
+    const extra = await requestMoreCandidates({
+      metadataBlock,
+      imageBufferForVision,
+      imageMediaType,
+      apiKey,
+      model,
+      avoidFocuses: allFocuses,
+      nextIdStart,
+    });
+    if (extra.length === 0) {
+      console.log('[anthropic]   보충 후보를 받지 못해 지금까지 모은 것만으로 진행합니다.');
+      break;
+    }
+    allIds = allIds.concat(extra.map((c) => c.id));
+    allFocuses = allFocuses.concat(extra.map((c) => c.focus));
+    console.log(`[anthropic]   보충 후보 ${extra.length}개가 실제로 그림에 있는지 검증 중...`);
+    const verifiedExtra = await verifyCandidateDetails({ candidates: extra, imageBufferForVision, imageMediaType, apiKey, model });
+    console.log(`[anthropic]   보충분 검증 통과 ${verifiedExtra.length}/${extra.length}개`);
+    verifiedCandidates = verifiedCandidates.concat(verifiedExtra);
+  }
 
   return { candidates: verifiedCandidates };
 }
