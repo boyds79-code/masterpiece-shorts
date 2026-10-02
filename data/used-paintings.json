@@ -1085,5 +1085,12 @@
     "reason": "[이미지 처리 실패] terminated",
     "transient": true,
     "transientFailCount": 1
+  },
+  {
+    "objectID": "wiki:rembrandt-the-night-watch",
+    "title": "The Night Watch",
+    "artistDisplayName": "Rembrandt van Rijn",
+    "usedAt": "2026-10-02T18:29:45.680Z",
+    "videoIdProcess": "4KO6c-308Zc"
   }
 ]
