@@ -49,3 +49,4 @@
 | 2026-10-01 | Devananda's Fourteen Auspicious Dreams Foretelling the Birth of Mahavira: Folio from a Kalpasutra Manuscript | Master of the Jaunpur Kalpasutra | [ckuGe39nsR0](https://studio.youtube.com/video/ckuGe39nsR0/edit) |
 | 2026-10-02 | Mona Lisa | Leonardo da Vinci | [7QqtUOkmSLs](https://studio.youtube.com/video/7QqtUOkmSLs/edit) |
 | 2026-10-02 | The Night Watch | Rembrandt van Rijn | [4KO6c-308Zc](https://studio.youtube.com/video/4KO6c-308Zc/edit) |
+| 2026-10-03 | Napoleon Crossing the Alps | Jacques-Louis David | [OxCeyga8mpE](https://studio.youtube.com/video/OxCeyga8mpE/edit) |
