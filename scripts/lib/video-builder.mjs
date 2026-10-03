@@ -94,6 +94,38 @@ function escapeDrawtextPath(p) {
   return p.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
 }
 
+// segment[0]("그림 전체 소개") 클립 위에 그림 제목/작가 이름 + 배지를 아주 짧게(displaySec)
+// 겹쳐 보여주기 위한 drawtext 필터들을 만듭니다. 예전에는 이 텍스트를 위해 별도의 무음
+// 타이틀 카드(buildTitleCard)를 영상 맨 앞에 INTRO_DURATION_SEC(2.5초)간 따로 붙였는데,
+// 그 동안 나레이션이 전혀 없어 "도입부가 밋밋하다"는 피드백을 받았습니다. 이제는 그 카드를
+// 없애고, 나레이션이 처음부터(또는 훅 나레이션 바로 뒤부터) 끊김 없이 흐르는 segment[0]
+// 클립 위에 같은 텍스트를 짧게 겹쳐서 보여주는 방식으로 바꿨습니다 — enable='lt(t,displaySec)'
+// 덕분에 그 시간이 지나면 텍스트가 사라지고 평소 세그먼트 클립과 동일하게 재생됩니다.
+//
+// buildTitleCard()와 같은 폰트/배지 스타일을 그대로 재사용해서 두 화면이 시각적으로
+// 어색하지 않게 일관되도록 했습니다. 텍스트는 (buildTitleCard와 마찬가지로) 파일로 써서
+// textfile=로 넘깁니다 — drawtext의 text= 옵션에 콜론/따옴표/줄바꿈을 직접 넣으면
+// 이스케이프가 너무 번거롭고 깨지기 쉽기 때문입니다.
+function buildTitleOverlayStage({ lines, badgeText, displaySec, outPath }) {
+  const captionFile = `${outPath}.title-overlay.txt`;
+  const wrapped = lines.map((line) => wrapText(line, TITLE_CARD_MAX_CHARS_PER_LINE));
+  fs.writeFileSync(captionFile, wrapped.join('\n'));
+
+  const enable = `lt(t,${displaySec.toFixed(3)})`;
+
+  const filters = [];
+  if (badgeText) {
+    filters.push(
+      `drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:text='${badgeText.split("'").join("\\'")}':fontsize=48:fontcolor=black:x=(w-text_w)/2:y=90:box=1:boxcolor=0xF5C242@0.95:boxborderw=22:enable='${enable}'`
+    );
+  }
+  filters.push(
+    `drawtext=fontfile=${escapeDrawtextPath(FONT_BOLD)}:textfile=${escapeDrawtextPath(captionFile)}:fontsize=58:fontcolor=white:line_spacing=14:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.45:boxborderw=32:enable='${enable}'`
+  );
+
+  return { filters, captionFile };
+}
+
 /**
  * 원본 그림 이미지에서 bbox 영역으로 크롭한 뒤 9:16으로 채우고, 은은한 Ken Burns
  * 줌 효과를 준 세그먼트 영상(오디오 없음)을 만듭니다.
@@ -115,13 +147,13 @@ function escapeDrawtextPath(p) {
  * 전체 그림이 아닌 경우)는 이미 특정 영역을 꽉 채워 보여주는 게 목적이므로 이 특별
  * 취급 대상이 아니고, 기존 cover 크롭 방식을 그대로 씁니다.
  */
-export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath }) {
+export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath, titleOverlay }) {
   // bboxTo가 주어지면(브라우저 검토 화면에서 사람이 "패닝/틸트"를 켠 경우) 정적인 줌 대신
   // bbox -> bboxTo로 화면이 실제로 이동하는 별도 경로를 씁니다. 가로로 넓은 그림처럼 한
   // 지점 확대만으로는 부족한 구도에 쓰라고 만든 기능이라, 기존 줌 전용 경로(이 함수의
   // 나머지 부분)는 건드리지 않고 완전히 분리했습니다.
   if (bboxTo) {
-    return buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath });
+    return buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath, titleOverlay });
   }
 
   const cw = Math.max(2, Math.round(bbox.w * imgWidth));
@@ -137,15 +169,22 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, b
   const isWholeImage = isNearFullImageBbox(bbox);
   const isLandscapeCrop = cw / ch > WIDTH / HEIGHT;
 
+  // titleOverlay가 주어지면(segment[0] 전용) 제목/배지 텍스트를 짧게 겹쳐 보여줄 drawtext
+  // 필터들을 미리 만들어둡니다 — buildTitleOverlayStage() 참고.
+  const overlay = titleOverlay ? buildTitleOverlayStage({ ...titleOverlay, outPath }) : null;
+
   let filterComplex;
   if (isWholeImage && isLandscapeCrop) {
+    const lastStage = overlay
+      ? `[zoomed]${overlay.filters.join(',')},format=yuv420p[out]`
+      : `[zoomed]format=yuv420p[out]`;
     filterComplex = [
       `[0:v]crop=${cw}:${ch}:${cx}:${cy},split=2[bgsrc][fgsrc]`,
       `[bgsrc]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},boxblur=25:5,eq=brightness=-0.08[bg]`,
       `[fgsrc]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease[fg]`,
       `[bg][fg]overlay=(W-w)/2:(H-h)/2:format=auto[merged]`,
       `[merged]zoompan=z='${zoomExpr}':d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}[zoomed]`,
-      `[zoomed]format=yuv420p[out]`,
+      lastStage,
     ].join(';');
   } else {
     filterComplex = [
@@ -153,6 +192,7 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, b
       `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase`,
       `crop=${WIDTH}:${HEIGHT}`,
       `zoompan=z='${zoomExpr}':d=${frames}:s=${WIDTH}x${HEIGHT}:fps=${FPS}`,
+      ...(overlay ? overlay.filters : []),
       `format=yuv420p[out]`,
     ].join(',');
   }
@@ -168,6 +208,8 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, b
     '-an',
     outPath,
   ]);
+
+  if (overlay) fs.rmSync(overlay.captionFile, { force: true });
 
   return outPath;
 }
@@ -186,7 +228,7 @@ export async function buildSegmentClip({ imagePath, imgWidth, imgHeight, bbox, b
  * 보간한 중간 값들도 항상 이미지 범위 안에 들어온다는 게 수학적으로 보장됩니다(각
  * 좌표가 두 유효한 값의 가중평균이므로).
  */
-async function buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath }) {
+async function buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bboxTo, durationSec, outPath, titleOverlay }) {
   const x0 = bbox.x * imgWidth;
   const y0 = bbox.y * imgHeight;
   const w0 = bbox.w * imgWidth;
@@ -207,9 +249,14 @@ async function buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bb
   const wExpr = lerp(w0, w1);
   const hExpr = lerp(h0, h1);
 
+  // titleOverlay가 주어지면(segment[0]가 패닝/틸트로 설정된 드문 경우) 여기서도 동일하게
+  // 제목/배지 텍스트를 짧게 겹쳐 보여줍니다.
+  const overlay = titleOverlay ? buildTitleOverlayStage({ ...titleOverlay, outPath }) : null;
+
   const filterComplex = [
     `[0:v]crop=w='${wExpr}':h='${hExpr}':x='${xExpr}':y='${yExpr}'`,
     `scale=${WIDTH}:${HEIGHT}`,
+    ...(overlay ? overlay.filters : []),
     `format=yuv420p[out]`,
   ].join(',');
 
@@ -224,6 +271,8 @@ async function buildPannedSegmentClip({ imagePath, imgWidth, imgHeight, bbox, bb
     '-an',
     outPath,
   ]);
+
+  if (overlay) fs.rmSync(overlay.captionFile, { force: true });
 
   return outPath;
 }
@@ -804,6 +853,59 @@ export async function concatClips(clipPaths, outPath) {
   return outPath;
 }
 
+// 로열티프리 배경음악(BGM) 파일을 넣어두는 폴더입니다(프로젝트 루트 기준 assets/bgm/).
+// 여기에 mp3/wav/m4a 등 파일을 몇 개 넣어두면, assembleVideo()가 영상을 만들 때마다 그중
+// 하나를 무작위로 골라 아주 작은 볼륨으로 전체 영상에 깔아줍니다. 폴더가 없거나 비어
+// 있으면 BGM 없이 예전처럼 나레이션만 있는 영상을 만듭니다 — 이 기능이 없던 때와 완전히
+// 동일하게 안전하게 동작합니다.
+const BGM_DIR = path.resolve(import.meta.dirname, '..', '..', 'assets', 'bgm');
+const BGM_VOLUME = 0.06; // "아주 작은 소리" — 나레이션을 방해하지 않을 정도로 낮게. 필요하면 조절하세요.
+const BGM_EXTENSIONS = /\.(mp3|wav|m4a|ogg|aac)$/i;
+
+function pickRandomBgmFile() {
+  if (!fs.existsSync(BGM_DIR)) return null;
+  const files = fs.readdirSync(BGM_DIR).filter((f) => BGM_EXTENSIONS.test(f));
+  if (files.length === 0) return null;
+  return path.join(BGM_DIR, files[Math.floor(Math.random() * files.length)]);
+}
+
+/**
+ * 완성된 영상(videoPath, 이미 나레이션 오디오가 합쳐진 상태)에 배경음악을 아주 작은
+ * 볼륨으로 깔아서 outPath에 씁니다. BGM_DIR에 쓸 수 있는 파일이 없으면 아무것도 하지
+ * 않고 false를 반환합니다 — 호출자가 원본(videoPath)을 그대로 쓰면 됩니다.
+ *
+ * `-stream_loop -1`로 BGM 파일을 영상보다 짧아도 끝까지 반복시키고, amix의
+ * duration=first가 믹스 결과를 정확히 영상(나레이션) 길이에 맞춰 자릅니다 — 영상 길이를
+ * 따로 ffprobe로 재서 맞출 필요가 없습니다. normalize=0을 반드시 줘야 하는데, 안 그러면
+ * amix가 입력 개수(2개)만큼 전체 볼륨을 자동으로 나눠버려 나레이션 볼륨까지 작아집니다.
+ * aformat으로 BGM 파일의 샘플레이트/채널이 무엇이든 나레이션과 같은 포맷으로 맞춥니다.
+ */
+async function addBackgroundMusic({ videoPath, outPath }) {
+  const bgmPath = pickRandomBgmFile();
+  if (!bgmPath) {
+    console.warn(`[video-builder] BGM 파일이 없어(${BGM_DIR}) 배경음악 없이 진행합니다.`);
+    return false;
+  }
+  console.log(`[video-builder] 배경음악 적용 중: ${path.basename(bgmPath)}`);
+  await run('ffmpeg', [
+    '-y',
+    '-i', videoPath,
+    '-stream_loop', '-1',
+    '-i', bgmPath,
+    '-filter_complex',
+    `[1:a]volume=${BGM_VOLUME},aformat=sample_rates=${AUDIO_SAMPLE_RATE}:channel_layouts=stereo[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
+    '-map', '0:v',
+    '-map', '[aout]',
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-ar', String(AUDIO_SAMPLE_RATE),
+    '-ac', String(AUDIO_CHANNELS),
+    '-shortest',
+    outPath,
+  ]);
+  return true;
+}
+
 /**
  * 전체 파이프라인: (있으면) 훅 몽타주 -> 인트로/아웃트로 -> 세그먼트별 클립 생성 -> 오디오
  * 합성 -> 이어붙이기 -> SRT 자막 파일 생성 -> 썸네일 이미지 생성. segments 각 항목은
@@ -849,23 +951,25 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
     }
   }
 
-  console.log('[video-builder] 인트로 카드 만드는 중...');
-  const introPath = path.join(workDir, 'intro.mp4');
-  await buildTitleCard({
-    imagePath,
-    lines: [painting.title, `${painting.artistDisplayName}${painting.objectDate ? ' · ' + painting.objectDate : ''}`],
-    durationSec: INTRO_DURATION_SEC,
-    outPath: introPath,
-    topBadgeText: 'HIDDEN MEANING',
-  });
-  clipPaths.push(introPath);
-  console.log('[video-builder] 인트로 카드 완료');
-
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
     const rawVideo = path.join(workDir, `seg-${i}-video.mp4`);
     const finalSeg = path.join(workDir, `seg-${i}-final.mp4`);
     console.log(`[video-builder] 세그먼트 ${i + 1}/${segments.length} 영상 조립 중... ("${seg.focus || seg.narration.slice(0, 20)}")`);
+
+    // segment[0]("그림 전체 소개")은 예전에 이 자리에서 별도의 무음 타이틀 카드
+    // (INTRO_DURATION_SEC = 2.5초, 나레이션 없음)로 먼저 보여준 뒤에야 이어졌는데, 그 동안
+    // 소리가 전혀 나지 않아 도입부가 늘어진다는 피드백을 받았습니다. 이제 그 무음 카드를
+    // 없애고, segment[0] 클립 위에 같은 제목/배지 텍스트를 짧게(titleOverlay.displaySec)
+    // 겹쳐서 보여줍니다 — 나레이션은 (훅이 있다면 훅 나레이션이 끝나자마자, 없다면 영상
+    // 맨 처음부터) 끊김 없이 바로 흐릅니다.
+    const titleOverlay = i === 0
+      ? {
+          lines: [painting.title, `${painting.artistDisplayName}${painting.objectDate ? ' · ' + painting.objectDate : ''}`],
+          badgeText: 'HIDDEN MEANING',
+          displaySec: Math.min(INTRO_DURATION_SEC, seg.durationSec),
+        }
+      : undefined;
 
     await buildSegmentClip({
       imagePath,
@@ -875,6 +979,7 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
       bboxTo: seg.bboxTo,
       durationSec: seg.durationSec,
       outPath: rawVideo,
+      titleOverlay,
     });
     await muxSegmentAudio({ videoPath: rawVideo, audioPath: seg.audioPath, outPath: finalSeg });
     fs.rmSync(rawVideo, { force: true });
@@ -898,13 +1003,26 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
   await concatClips(clipPaths, finalPath);
   console.log('[video-builder] 전체 영상 조립 완료');
 
+  // 배경음악(BGM)을 아주 작은 볼륨으로 깔아줍니다. assets/bgm/에 쓸 수 있는 파일이 없으면
+  // (아직 안 넣어뒀거나 폴더가 없으면) 조용히 건너뛰고 예전처럼 나레이션만 있는 영상
+  // 그대로 둡니다 — 이 기능이 없던 때와 완전히 동일하게 안전하게 동작합니다.
+  const bgmMixedPath = path.join(workDir, 'final-with-bgm.mp4');
+  const bgmApplied = await addBackgroundMusic({ videoPath: finalPath, outPath: bgmMixedPath });
+  if (bgmApplied) {
+    fs.rmSync(finalPath, { force: true });
+    fs.renameSync(bgmMixedPath, finalPath);
+    console.log('[video-builder] 배경음악 적용 완료');
+  }
+
   // 훅 몽타주가 있으면, 그 나레이션도 CC 자막에 포함시키고(시각 몽타주 자체보다 먼저
   // 끝나는 게 보통이므로 hook.durationSec까지만) 이후 세그먼트들의 시작 시각을 훅 몽타주
-  // 전체 길이(totalDurationSec, 나레이션이 끝난 뒤의 무음 구간까지 포함)만큼 더 밀어냅니다.
+  // 길이(totalDurationSec)만큼만 밀어냅니다. 예전에는 여기에 INTRO_DURATION_SEC(무음
+  // 타이틀 카드 길이)도 더했지만, 그 카드를 없앴으므로(segment[0]가 훅 직후 바로 이어짐)
+  // 더 이상 더하지 않습니다.
   const srtPath = path.join(workDir, 'captions.srt');
   if (hookResult) {
     const hookBlock = buildSrtBlock(1, 0, hook.durationSec, hook.text);
-    const restOffset = hookResult.totalDurationSec + INTRO_DURATION_SEC;
+    const restOffset = hookResult.totalDurationSec;
     let t = restOffset;
     const restBlocks = segments.map((seg, i) => {
       const start = t;
@@ -914,7 +1032,9 @@ export async function assembleVideo({ imagePath, segments, painting, workDir, ho
     });
     fs.writeFileSync(srtPath, [hookBlock, ...restBlocks].join('\n'));
   } else {
-    fs.writeFileSync(srtPath, buildSrt(segments, INTRO_DURATION_SEC));
+    // segment[0]가 영상 맨 처음(0초)부터 바로 시작하므로 더 이상 INTRO_DURATION_SEC
+    // 오프셋 없이 자막을 만듭니다.
+    fs.writeFileSync(srtPath, buildSrt(segments, 0));
   }
 
   const thumbnailPath = path.join(workDir, 'thumbnail.jpg');

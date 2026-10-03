@@ -4,3 +4,6 @@ output/
 *.log
 .DS_Store
 data/.met-status.json
+
+# 로열티프리 배경음악 원본 파일 — 용량이 커서(개당 수 MB) git에는 올리지 않음
+assets/bgm/*.mp3
