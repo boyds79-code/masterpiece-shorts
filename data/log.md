@@ -112,3 +112,6 @@
 | 2026-10-02 | The Kiss | Gustav Klimt | [sfhffgdDziw](https://studio.youtube.com/video/sfhffgdDziw/edit) |
 | 2026-10-02 | Mona Lisa | Leonardo da Vinci | [PkN027yTox4](https://studio.youtube.com/video/PkN027yTox4/edit) |
 | 2026-10-02 | The Scream | Edvard Munch | [xsezXbsUBEI](https://studio.youtube.com/video/xsezXbsUBEI/edit) |
+| 2026-10-02 | The Birth of Venus | Sandro Botticelli | [vBsLU76CfpU](https://studio.youtube.com/video/vBsLU76CfpU/edit) |
+| 2026-10-03 | The Night Watch | Rembrandt van Rijn | [3qtx1x3g3I8](https://studio.youtube.com/video/3qtx1x3g3I8/edit) |
+| 2026-10-03 | The Night Watch | Rembrandt van Rijn | [dxJ3AL_udVQ](https://studio.youtube.com/video/dxJ3AL_udVQ/edit) |

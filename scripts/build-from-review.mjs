@@ -77,6 +77,19 @@ export async function runBuildFromReviewDir(reviewDir) {
   // workDir로 넘기므로 원본 이미지/대본까지 함께 정리되어, generateOneVideo()가
   // output/run-*/을 정리하는 것과 동일하게 산출물이 남지 않습니다). keepOnFailure: true라서
   // 실패하면 대신 폴더를 남겨서 위 재사용 로직으로 다시 시도할 수 있게 합니다.
+  //
+  // part-info.json은 workDir(=resolvedDir) 안에 있으므로, buildAndUploadHiddenMeaningVideo가
+  // 성공 시 그 폴더를 통째로 지우기 전에 먼저 읽어둬야 합니다.
+  const partInfoPath = path.join(resolvedDir, 'part-info.json');
+  let partInfo = null;
+  if (fs.existsSync(partInfoPath)) {
+    try {
+      partInfo = JSON.parse(fs.readFileSync(partInfoPath, 'utf8'));
+    } catch (err) {
+      console.warn(`[build-from-review] part-info.json을 읽지 못해 단일 영상으로 간주합니다: ${err.message}`);
+    }
+  }
+
   const { uploadResult } = await buildAndUploadHiddenMeaningVideo({
     painting,
     script,
@@ -86,13 +99,24 @@ export async function runBuildFromReviewDir(reviewDir) {
     resumeFrom,
   });
 
+  // "두 편으로 나누기"(review-server.mjs의 /confirm-candidates-split)로 만들어진 리뷰
+  // 폴더는 같은 그림(objectID)에 대해 1부/2부 영상을 각각 따로 업로드하므로, 둘 다
+  // videoIdMeaning이라는 같은 필드에 기록하면 upsertUsed가 나중 것으로 덮어써서 먼저 만든
+  // 쪽의 영상 ID가 used-paintings.json에서 사라집니다(영상 자체는 YouTube에 남아있지만
+  // 이 로그로는 추적이 안 됨). part-info.json이 있으면 part 번호를 붙인 별도 필드
+  // (videoIdMeaningPart1 / videoIdMeaningPart2)에 기록해서 서로 덮어쓰지 않게 합니다.
+  const videoIdField = partInfo?.part ? `videoIdMeaningPart${partInfo.part}` : 'videoIdMeaning';
+  if (partInfo?.part) {
+    console.log(`[build-from-review] "두 편으로 나누기"의 ${partInfo.part}부로 인식해, used-paintings.json에 ${videoIdField}로 기록합니다.`);
+  }
+
   const usedList = loadUsed();
   upsertUsed(usedList, {
     objectID: painting.objectID,
     title: painting.title,
     artistDisplayName: painting.artistDisplayName,
     usedAt: new Date().toISOString(),
-    videoIdMeaning: uploadResult.videoId,
+    [videoIdField]: uploadResult.videoId,
     reservedForReview: undefined,
     reservedAt: undefined,
   });

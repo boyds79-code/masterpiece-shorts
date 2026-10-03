@@ -1084,13 +1084,24 @@
     "skipped": true,
     "reason": "[이미지 처리 실패] terminated",
     "transient": true,
-    "transientFailCount": 1
+    "transientFailCount": 1,
+    "usedAt": "2026-10-02T15:30:08.912Z",
+    "videoIdMeaning": "vBsLU76CfpU"
+  },
+  {
+    "objectID": "wiki:botticelli-the-birth-of-venus",
+    "title": "The Birth of Venus",
+    "artistDisplayName": "Sandro Botticelli",
+    "reservedAt": "2026-10-02T15:16:33.625Z",
+    "reservedForReview": true
   },
   {
     "objectID": "wiki:rembrandt-the-night-watch",
     "title": "The Night Watch",
     "artistDisplayName": "Rembrandt van Rijn",
     "usedAt": "2026-10-02T18:29:45.680Z",
-    "videoIdProcess": "4KO6c-308Zc"
+    "videoIdProcess": "4KO6c-308Zc",
+    "videoIdMeaningPart1": "3qtx1x3g3I8",
+    "videoIdMeaningPart2": "dxJ3AL_udVQ"
   }
 ]

@@ -8,6 +8,7 @@
     "generate": "node scripts/generate-video.mjs",
     "generate:review": "node scripts/generate-review.mjs",
     "build:review": "node scripts/build-from-review.mjs",
+    "review:resume": "node scripts/resume-review.mjs",
     "generate:batch": "node scripts/generate-batch.mjs",
     "get-youtube-token": "node scripts/get-youtube-token.mjs",
     "generate:process": "node scripts/generate-process-video.mjs",

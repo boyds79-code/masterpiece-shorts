@@ -22,14 +22,16 @@ import { clampBbox, generateVideoScript } from './anthropic.mjs';
 //   2) script.json도 있음 -> 기존 확대 위치(bbox)/패닝 검토 화면(review-editor.mjs).
 //
 // 라우트:
-//   GET  /                   위 설명대로 단계에 맞는 화면 (매번 새로 읽어서 렌더링)
-//   GET  /original.jpg       원본 그림 이미지
-//   GET  /events              진행 로그를 실시간으로 밀어주는 SSE 스트림
-//   POST /confirm-candidates  고른 후보 디테일로 최종 대본(나레이션)을 생성 -> script.json 저장
-//   POST /save                 수정된 bbox를 script.json에 즉시 저장
-//   POST /build                 나레이션 생성 -> 영상 조립 -> YouTube 업로드까지 실행
-//   POST /reset-candidates      대본 확정을 취소하고 "숨은 이야기 고르기" 화면으로 되돌아감
-//                               (아래 "되돌아가기" 설명 참고)
+//   GET  /                       위 설명대로 단계에 맞는 화면 (매번 새로 읽어서 렌더링)
+//   GET  /original.jpg           원본 그림 이미지
+//   GET  /events                  진행 로그를 실시간으로 밀어주는 SSE 스트림
+//   POST /confirm-candidates      고른 후보 디테일로 최종 대본(나레이션)을 생성 -> script.json 저장
+//   POST /confirm-candidates-split  후보를 1부/2부 둘로 나눠서 각각 독립된 대본을 생성
+//                                    (아래 "두 편으로 나누기" 설명 참고)
+//   POST /save                     수정된 bbox를 script.json에 즉시 저장
+//   POST /build                     나레이션 생성 -> 영상 조립 -> YouTube 업로드까지 실행
+//   POST /reset-candidates          대본 확정을 취소하고 "숨은 이야기 고르기" 화면으로 되돌아감
+//                                   (아래 "되돌아가기" 설명 참고)
 //
 // 되돌아가기: 대본(script.json)이 이미 만들어진 뒤에도, 확대 위치 검토 화면에서
 // "다시 고르기" 버튼을 누르면 이 POST /reset-candidates가 지금의 script.json을
@@ -37,8 +39,31 @@ import { clampBbox, generateVideoScript } from './anthropic.mjs';
 // 남아있으므로, 다음 GET /부터는 다시 "숨은 이야기 고르기" 화면이 뜹니다. 이때 직전에
 // 확정했던 script.previous.json을 읽어서 그때 골랐던 디테일들을 기본으로 다시
 // 체크해줘서, 처음부터 다시 고르지 않고 잘못 들어간 것만 바로 고칠 수 있게 합니다.
+//
+// 두 편으로 나누기: 후보 디테일이 너무 많고(예: 10개) 전부 쓸 만해서 하나의 영상에
+// 욱여넣고 싶지 않을 때, "숨은 이야기 고르기" 화면에서 "두 편으로 나누기"를 켜면 카드를
+// 클릭할 때마다 1부 -> 2부 -> 미선택으로 순환하는 방식으로 바뀝니다. "이렇게 두 편으로
+// 만들기"를 누르면 POST /confirm-candidates-split이 호출되어:
+//   1) 지금 이 리뷰 폴더(reviewDir)는 "1부" 전용이 되어, 1부로 고른 디테일로 대본을
+//      만들고 script.json을 씁니다 — 그 즉시 SSE로 이 화면에 알려서 평소처럼 확대 위치
+//      검토 화면으로 넘어갑니다.
+//   2) `${reviewDir}-part2`라는 새 폴더를 만들어 painting.json/candidates.json/이미지를
+//      복사해 넣고, 2부로 고른 디테일로 독립된 대본을 만들어 그 폴더의 script.json에
+//      씁니다. 다 되면 그 폴더를 위해 이 함수(startReviewServer)를 한 번 더 호출해서
+//      새 포트에 서버를 띄우고 브라우저 새 탭을 자동으로 엽니다 — 이미 script.json이
+//      있으므로 그 탭은 바로 확대 위치 검토 화면으로 시작합니다.
+//   두 폴더 모두 painting.objectID는 같지만(같은 그림), build-from-review.mjs가 각
+//   폴더에 남겨진 part-info.json을 보고 used-paintings.json에 videoIdMeaningPart1 /
+//   videoIdMeaningPart2로 구분해서 기록하므로 서로 덮어쓰지 않습니다.
+
+// 이 프로세스 안에서 몇 개의 검토 서버가 떠 있는지 추적합니다. "두 편으로 나누기"를 쓰면
+// 한 프로세스 안에 1부/2부 서버가 동시에 뜨는데, runBuildAndBroadcast()가 예전처럼 빌드
+// 하나가 성공할 때마다 바로 process.exit 해버리면 다른 한쪽의 검토/빌드가 중간에
+// 끊깁니다. 마지막 남은 서버의 빌드까지 끝난 뒤에만 프로세스를 종료합니다.
+let activeServerCount = 0;
 
 export function startReviewServer({ reviewDir, imageFile = 'original.jpg' }) {
+  activeServerCount += 1;
   const paintingPath = path.join(reviewDir, 'painting.json');
   const candidatesPath = path.join(reviewDir, 'candidates.json');
   const scriptPath = path.join(reviewDir, 'script.json');
@@ -190,6 +215,62 @@ export function startReviewServer({ reviewDir, imageFile = 'original.jpg' }) {
         return;
       }
 
+      if (req.method === 'POST' && req.url === '/confirm-candidates-split') {
+        if (confirmingCandidates) {
+          sendJson(res, 409, { error: '이미 생성 중입니다.' });
+          return;
+        }
+        if (fs.existsSync(scriptPath)) {
+          sendJson(res, 410, { error: '이미 대본이 만들어졌습니다. 새로고침해주세요.' });
+          return;
+        }
+        if (!fs.existsSync(candidatesPath) || !fs.existsSync(paintingPath) || !fs.existsSync(visionPath)) {
+          sendJson(res, 410, { error: '리뷰 파일을 찾을 수 없습니다. 이미 완료되었거나 폴더가 삭제되었을 수 있습니다.' });
+          return;
+        }
+
+        const body = await readBody(req);
+        let parsed;
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          sendJson(res, 400, { error: '잘못된 JSON입니다.' });
+          return;
+        }
+        const part1Ids = Array.isArray(parsed.part1Ids) ? [...new Set(parsed.part1Ids)] : [];
+        const part2Ids = Array.isArray(parsed.part2Ids) ? [...new Set(parsed.part2Ids)] : [];
+        const overlap = part1Ids.filter((id) => part2Ids.includes(id));
+        if (overlap.length > 0) {
+          sendJson(res, 400, { error: '1부와 2부에 동시에 들어간 디테일이 있습니다: ' + overlap.join(', ') });
+          return;
+        }
+        if (part1Ids.length < 2 || part2Ids.length < 2) {
+          sendJson(res, 400, { error: '1부와 2부 각각 최소 2개 이상의 디테일을 선택해주세요.' });
+          return;
+        }
+
+        const candidatesData = readJson(candidatesPath);
+        const selectedDetails1 = candidatesData.candidates.filter((c) => part1Ids.includes(c.id));
+        const selectedDetails2 = candidatesData.candidates.filter((c) => part2Ids.includes(c.id));
+
+        confirmingCandidates = true;
+        sendJson(res, 202, { ok: true });
+        runConfirmSplitAndBroadcast({
+          reviewDir,
+          paintingPath,
+          candidatesPath,
+          scriptPath,
+          visionPath,
+          imageFile,
+          selectedDetails1,
+          selectedDetails2,
+          broadcast,
+        }).finally(() => {
+          confirmingCandidates = false;
+        });
+        return;
+      }
+
       if (req.method === 'POST' && req.url === '/save') {
         const body = await readBody(req);
         let updated;
@@ -318,6 +399,92 @@ async function runConfirmCandidatesAndBroadcast({ reviewDir, paintingPath, scrip
   }
 }
 
+// "두 편으로 나누기"로 확정했을 때 실행됩니다. 이 reviewDir는 1부 전용이 되어 평소처럼
+// script.json을 씁니다(완료 즉시 SSE로 알려서 이 화면은 바로 확대 위치 검토로 넘어감).
+// 그 다음 `${reviewDir}-part2` 폴더를 새로 만들어 painting.json/candidates.json/이미지를
+// 복사해 넣고, 2부로 고른 디테일로 독립된 대본을 생성합니다. 두 폴더 모두에
+// part-info.json을 남겨서, build-from-review.mjs가 나중에 이 폴더가 1부/2부 중 무엇인지
+// 알고 used-paintings.json에 videoIdMeaningPart1/videoIdMeaningPart2로 구분해 기록할 수
+// 있게 합니다. 2부 대본까지 완성되면 그 폴더를 위해 startReviewServer()를 한 번 더
+// 호출해서 새 탭을 자동으로 엽니다 — 이미 script.json이 있으므로 후보 고르기 화면을
+// 건너뛰고 바로 확대 위치 검토 화면으로 시작합니다.
+async function runConfirmSplitAndBroadcast({ reviewDir, paintingPath, candidatesPath, scriptPath, visionPath, imageFile, selectedDetails1, selectedDetails2, broadcast }) {
+  const original = { log: console.log, warn: console.warn, error: console.error };
+  function wrap(level) {
+    return (...args) => {
+      original[level](...args);
+      broadcast({ type: 'log', level, text: args.map(String).join(' ') });
+    };
+  }
+  console.log = wrap('log');
+  console.warn = wrap('warn');
+  console.error = wrap('error');
+
+  const part2Dir = `${reviewDir}-part2`;
+
+  try {
+    const painting = JSON.parse(fs.readFileSync(paintingPath, 'utf8'));
+
+    console.log(`[review-server] [1부] 선택한 디테일 ${selectedDetails1.length}개로 대본을 작성하는 중...`);
+    const script1 = await generateVideoScript({
+      painting,
+      imageBufferForVision: fs.readFileSync(visionPath),
+      imagePath: visionPath,
+      imageMediaType: 'image/jpeg',
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: process.env.CLAUDE_MODEL,
+      selectedDetails: selectedDetails1,
+    });
+    fs.writeFileSync(scriptPath, JSON.stringify(script1, null, 2) + '\n');
+    fs.writeFileSync(
+      path.join(reviewDir, 'part-info.json'),
+      JSON.stringify({ part: 1, totalParts: 2, siblingDir: part2Dir }, null, 2) + '\n'
+    );
+    console.log(`[review-server] [1부] 대본 완성 — 세그먼트 ${script1.segments.length}개, 제목: "${script1.youtube.title}"`);
+    // 1부는 여기서 바로 알려서, 사람이 1부의 확대 위치부터 검토할 수 있게 합니다. 2부는
+    // 아래에서 이어서 계속 만듭니다.
+    broadcast({ type: 'script-ready' });
+
+    console.log('[review-server] [2부] 2부 폴더를 준비하는 중...');
+    fs.mkdirSync(part2Dir, { recursive: true });
+    fs.copyFileSync(paintingPath, path.join(part2Dir, 'painting.json'));
+    fs.copyFileSync(candidatesPath, path.join(part2Dir, 'candidates.json'));
+    fs.copyFileSync(visionPath, path.join(part2Dir, 'vision.jpg'));
+    const mainImagePath = path.join(reviewDir, imageFile);
+    if (fs.existsSync(mainImagePath)) {
+      fs.copyFileSync(mainImagePath, path.join(part2Dir, imageFile));
+    }
+    fs.writeFileSync(
+      path.join(part2Dir, 'part-info.json'),
+      JSON.stringify({ part: 2, totalParts: 2, siblingDir: reviewDir }, null, 2) + '\n'
+    );
+
+    console.log(`[review-server] [2부] 선택한 디테일 ${selectedDetails2.length}개로 대본을 작성하는 중...`);
+    const part2VisionPath = path.join(part2Dir, 'vision.jpg');
+    const script2 = await generateVideoScript({
+      painting,
+      imageBufferForVision: fs.readFileSync(part2VisionPath),
+      imagePath: part2VisionPath,
+      imageMediaType: 'image/jpeg',
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: process.env.CLAUDE_MODEL,
+      selectedDetails: selectedDetails2,
+    });
+    fs.writeFileSync(path.join(part2Dir, 'script.json'), JSON.stringify(script2, null, 2) + '\n');
+    console.log(`[review-server] [2부] 대본 완성 — 세그먼트 ${script2.segments.length}개, 제목: "${script2.youtube.title}"`);
+
+    console.log(`[review-server] [2부] 검토 화면을 새 브라우저 탭으로 엽니다: ${part2Dir}`);
+    startReviewServer({ reviewDir: part2Dir, imageFile });
+  } catch (err) {
+    original.error('[review-server] 분할 대본 생성 실패:', err);
+    broadcast({ type: 'error', message: err.message });
+  } finally {
+    console.log = original.log;
+    console.warn = original.warn;
+    console.error = original.error;
+  }
+}
+
 // build-from-review.mjs의 runBuildFromReviewDir()를 실행하면서, 그 안에서 나오는
 // console.log/warn/error를 가로채 터미널에도 그대로 찍고(원래 동작 유지) 동시에 브라우저의
 // 로그 패널로도 실시간 전송합니다. 끝나면(성공/실패 모두) SSE로 최종 결과를 한 번 더
@@ -339,7 +506,12 @@ async function runBuildAndBroadcast(reviewDir, broadcast) {
   try {
     const { uploadResult } = await runBuildFromReviewDir(reviewDir);
     broadcast({ type: 'done', uploadResult });
-    setTimeout(() => process.exit(0), 1500);
+    activeServerCount -= 1;
+    if (activeServerCount <= 0) {
+      setTimeout(() => process.exit(0), 1500);
+    } else {
+      console.log('[review-server] 다른 편(1부/2부)의 검토/빌드가 아직 끝나지 않아 터미널을 계속 열어둡니다.');
+    }
   } catch (err) {
     // 실패 원인을 브라우저 로그 패널로만 보내고 터미널엔 안 찍었더니, 브라우저 탭을 이미
     // 닫았거나 안 보고 있으면 왜 실패했는지 터미널만 봐서는 전혀 알 수 없었습니다. 반드시

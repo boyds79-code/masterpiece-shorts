@@ -3,10 +3,18 @@
 // "이 디테일들로 확인" 버튼은 fetch로 같은 서버의 /confirm-candidates를 호출해서
 // (1) 고른 디테일로 최종 대본(나레이션 확정)을 만들고 (2) 성공하면 화면을 새로고침해서
 // 기존 확대 위치(bbox)/패닝 검토 화면(review-editor.mjs)으로 넘어갑니다.
+//
+// 후보가 10개 가까이 나왔는데 전부 쓸 만해서 하나의 영상에 다 욱여넣고 싶지 않을 때를
+// 위해 "두 편으로 나누기" 모드도 지원합니다 — 켜면 체크박스 대신 카드를 클릭할 때마다
+// 1부 -> 2부 -> 미선택으로 순환하는 방식으로 바뀌고, "이렇게 두 편으로 만들기"를 누르면
+// /confirm-candidates-split을 호출해서 이 폴더는 1부로, 새로 만들어진 옆 폴더는 2부로
+// 각각 독립적인 대본을 만듭니다(review-server.mjs 참고).
 
 import { escapeHtml } from './review-editor.mjs';
 
 const PALETTE = ['#e0554c', '#3f8ee0', '#e0a83f', '#7c4fe0', '#3fae7d', '#e0559c', '#5f7ee0', '#c98a2c', '#4fa8a0', '#a05fe0'];
+const PART1_COLOR = '#3f8ee0';
+const PART2_COLOR = '#e0a83f';
 
 /**
  * @param {object} params
@@ -75,9 +83,11 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
     border-radius: 3px;
     pointer-events: none;
     opacity: 0.25;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.15s ease, border-color 0.15s ease;
   }
   .marker.active { opacity: 1; }
+  .marker.part1 { border-color: ${PART1_COLOR} !important; color: ${PART1_COLOR} !important; }
+  .marker.part2 { border-color: ${PART2_COLOR} !important; color: ${PART2_COLOR} !important; }
   .marker .num {
     position: absolute;
     top: -20px;
@@ -121,6 +131,22 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
   #counter.good { background: #e9f7ef; color: #1f6f43; }
   #counter.warn { background: #fdf3e3; color: #a5691a; }
   #counter.bad { background: #fdecea; color: #c0392b; }
+  #counter1, #counter2 {
+    font-weight: 700;
+    font-size: 14px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: #eee;
+  }
+  .toggle-row { margin-top: 10px; }
+  #splitToggleBtn {
+    background: #eee;
+    color: #333;
+  }
+  #splitToggleBtn.on {
+    background: #1f1c17;
+    color: #fff;
+  }
   .card {
     background: #fff;
     border-radius: 6px;
@@ -134,6 +160,8 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
   }
   .card:hover { box-shadow: 0 1px 8px rgba(0,0,0,0.15); }
   .card.checked { border-color: currentColor; }
+  .card.part1 { border-color: ${PART1_COLOR}; background: #f3f8fe; }
+  .card.part2 { border-color: ${PART2_COLOR}; background: #fdf8ee; }
   .card input[type="checkbox"] {
     margin-top: 3px;
     width: 16px;
@@ -169,6 +197,16 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
     padding: 1px 7px;
     border-radius: 3px;
   }
+  .card .group-badge {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #fff;
+    padding: 1px 8px;
+    border-radius: 10px;
+  }
+  .card .group-badge.part1 { background: ${PART1_COLOR}; }
+  .card .group-badge.part2 { background: ${PART2_COLOR}; }
+  .card .group-badge.none { background: #bbb; }
   .card .teaser { font-size: 13px; color: #555; margin-top: 6px; line-height: 1.5; }
   .toolbar {
     position: sticky;
@@ -235,10 +273,18 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
   </div>
   <div class="cards">
     <div class="guide">
-      ${isReset ? '<b>직전에 확정했던 디테일들을 다시 체크해뒀어요.</b> 잘못 들어간 것만 체크 해제하고, 빠진 게 있으면 추가로 체크한 뒤 다시 확인을 눌러주세요.<br><br>' : ''}<b>몇 개를 고르면 좋을까요?</b> 완성된 영상은 도입·맥락·마무리(고정 3구간) + 여기서 고른 디테일 개수로 구성되고, 전체 나레이션은 항상 약 170~230단어(70~95초) 안팎으로 맞춰집니다. 디테일을 너무 적게 고르면(1~2개) 밋밋하고, 너무 많이 고르면(8개 이상) 하나당 설명할 시간이 급격히 줄어들어요. <b>4~6개</b>를 추천하고, 3~7개면 무난합니다. ${isReset ? '' : `Claude가 특히 강하다고 판단한 ${recommendedCount}개는 미리 체크해뒀어요 — 그대로 확인하셔도 되고 자유롭게 바꾸셔도 됩니다.`}
-      <div class="counter-row">
+      ${isReset ? '<b>직전에 확정했던 디테일들을 다시 체크해뒀어요.</b> 잘못 들어간 것만 체크 해제하고, 빠진 게 있으면 추가로 체크한 뒤 다시 확인을 눌러주세요.<br><br>' : ''}<b>몇 개를 고르면 좋을까요?</b> 완성된 영상은 도입·맥락·마무리(고정 3구간) + 여기서 고른 디테일 개수로 구성되고, 전체 나레이션은 항상 약 170~230단어(70~95초) 안팎으로 맞춰집니다. 디테일을 너무 적게 고르면(1~2개) 밋밋하고, 너무 많이 고르면(8개 이상) 하나당 설명할 시간이 급격히 줄어들어요. <b>4~6개</b>를 추천하고, 3~7개면 무난합니다. ${isReset ? '' : `Claude가 특히 강하다고 판단한 ${recommendedCount}개는 미리 체크해뒀어요 — 그대로 확인하셔도 되고 자유롭게 바꾸셔도 됩니다.`} 후보가 전부 쓸 만해서 하나로 합치기 아깝다면, 아래 "두 편으로 나누기"를 눌러서 두 편의 영상으로 나눠 만들 수도 있습니다.
+      <div class="counter-row" id="counterRow">
         <span id="counter">0개 선택됨</span>
         <span id="counterNote" style="font-size:12.5px;color:#888;"></span>
+      </div>
+      <div class="counter-row" id="counterPairRow" style="display:none;">
+        <span id="counter1">1부 0개</span>
+        <span id="counter2">2부 0개</span>
+        <span id="counterNote2" style="font-size:12.5px;color:#888;"></span>
+      </div>
+      <div class="toggle-row">
+        <button id="splitToggleBtn" type="button">두 편으로 나누기</button>
       </div>
     </div>
     <div id="cardList"></div>
@@ -263,19 +309,31 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
   const cardList = document.getElementById('cardList');
   const counterEl = document.getElementById('counter');
   const counterNoteEl = document.getElementById('counterNote');
+  const counterRowEl = document.getElementById('counterRow');
+  const counterPairRowEl = document.getElementById('counterPairRow');
+  const counter1El = document.getElementById('counter1');
+  const counter2El = document.getElementById('counter2');
+  const counterNote2El = document.getElementById('counterNote2');
+  const splitToggleBtn = document.getElementById('splitToggleBtn');
   const confirmBtn = document.getElementById('confirmBtn');
   const statusEl = document.getElementById('status');
   const bannerEl = document.getElementById('banner');
   const logEl = document.getElementById('log');
 
   // "다시 고르기"로 되돌아온 경우 직전 선택(focus 문구로 역매칭)을 기본 체크로, 아니면
-  // 기존처럼 Claude 추천을 기본 체크로 표시합니다.
+  // 기존처럼 Claude 추천을 기본 체크로 표시합니다. (단일 영상 모드에서만 씁니다.)
   const previousFocusSet = new Set(PREVIOUS_FOCUSES);
   const selected = previousFocusSet.size > 0
     ? new Set(CANDIDATES.filter((c) => previousFocusSet.has(c.focus)).map((c) => c.id))
     : new Set(CANDIDATES.filter((c) => c.recommended).map((c) => c.id));
   const markerEls = {}; // id -> element
-  const cardEls = {}; // id -> element
+  const cardEls = {}; // id -> { el, checkbox, badge }
+
+  // 두 편으로 나누기 모드 상태. 0=미선택, 1=1부, 2=2부. 체크박스(selected)와는 별도로
+  // 관리합니다 — 모드를 껐다 켜도 서로 간섭하지 않습니다.
+  let splitMode = false;
+  const groupAssignment = {};
+  CANDIDATES.forEach((c) => { groupAssignment[c.id] = 0; });
 
   function fmtPercent(v) { return (v * 100) + '%'; }
 
@@ -316,12 +374,74 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
     confirmBtn.disabled = n < 2;
   }
 
+  function paintCounterPill(el, ok) {
+    el.style.background = ok ? '#e9f7ef' : '#fdecea';
+    el.style.color = ok ? '#1f6f43' : '#c0392b';
+  }
+
+  function updateSplitCounters() {
+    const ids = Object.keys(groupAssignment);
+    const n1 = ids.filter((id) => groupAssignment[id] === 1).length;
+    const n2 = ids.filter((id) => groupAssignment[id] === 2).length;
+    counter1El.textContent = '1부 ' + n1 + '개';
+    counter2El.textContent = '2부 ' + n2 + '개';
+    paintCounterPill(counter1El, n1 >= 2);
+    paintCounterPill(counter2El, n2 >= 2);
+    counterNote2El.textContent = (n1 < 2 || n2 < 2) ? '1부, 2부 각각 최소 2개 이상 선택해주세요.' : '';
+    confirmBtn.disabled = n1 < 2 || n2 < 2;
+  }
+
   function setChecked(id, checked) {
     if (checked) selected.add(id); else selected.delete(id);
     markerEls[id].classList.toggle('active', checked);
     cardEls[id].el.classList.toggle('checked', checked);
     cardEls[id].checkbox.checked = checked;
     updateCounter();
+  }
+
+  function applyModeVisuals() {
+    CANDIDATES.forEach((c) => {
+      const entry = cardEls[c.id];
+      const marker = markerEls[c.id];
+      if (splitMode) {
+        entry.checkbox.style.display = 'none';
+        entry.badge.style.display = 'inline-block';
+        entry.el.classList.remove('checked', 'part1', 'part2');
+        marker.classList.remove('part1', 'part2');
+        const g = groupAssignment[c.id] || 0;
+        if (g === 1) {
+          entry.el.classList.add('part1');
+          marker.classList.add('part1', 'active');
+          entry.badge.textContent = '1부';
+          entry.badge.className = 'group-badge part1';
+        } else if (g === 2) {
+          entry.el.classList.add('part2');
+          marker.classList.add('part2', 'active');
+          entry.badge.textContent = '2부';
+          entry.badge.className = 'group-badge part2';
+        } else {
+          marker.classList.remove('active');
+          entry.badge.textContent = '미선택';
+          entry.badge.className = 'group-badge none';
+        }
+      } else {
+        entry.checkbox.style.display = '';
+        entry.badge.style.display = 'none';
+        entry.el.classList.remove('part1', 'part2');
+        marker.classList.remove('part1', 'part2');
+        const checked = selected.has(c.id);
+        entry.checkbox.checked = checked;
+        entry.el.classList.toggle('checked', checked);
+        marker.classList.toggle('active', checked);
+      }
+    });
+  }
+
+  function cycleGroup(id) {
+    const cur = groupAssignment[id] || 0;
+    groupAssignment[id] = (cur + 1) % 3;
+    applyModeVisuals();
+    updateSplitCounters();
   }
 
   function buildCards() {
@@ -342,10 +462,12 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
         '<span class="idx" style="background:' + color + '">' + (i + 1) + '</span>' +
         '<span class="focus"></span>' +
         (c.recommended ? '<span class="badge">Claude 추천</span>' : '') +
+        '<span class="group-badge none" style="display:none;"></span>' +
         '</div>' +
         '<div class="teaser"></div>';
       body.querySelector('.focus').textContent = c.focusKo || c.focus;
       body.querySelector('.teaser').textContent = c.teaserKo || c.teaser;
+      const badge = body.querySelector('.group-badge');
 
       div.appendChild(checkbox);
       div.appendChild(body);
@@ -354,12 +476,27 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
       function toggle() { setChecked(c.id, !selected.has(c.id)); }
       checkbox.addEventListener('click', (e) => e.stopPropagation());
       checkbox.addEventListener('change', () => setChecked(c.id, checkbox.checked));
-      div.addEventListener('click', toggle);
+      div.addEventListener('click', () => {
+        if (splitMode) cycleGroup(c.id); else toggle();
+      });
 
       cardList.appendChild(div);
-      cardEls[c.id] = { el: div, checkbox };
+      cardEls[c.id] = { el: div, checkbox, badge };
     });
   }
+
+  splitToggleBtn.addEventListener('click', () => {
+    splitMode = !splitMode;
+    splitToggleBtn.textContent = splitMode ? '한 편으로 합치기' : '두 편으로 나누기';
+    splitToggleBtn.classList.toggle('on', splitMode);
+    counterRowEl.style.display = splitMode ? 'none' : 'flex';
+    counterPairRowEl.style.display = splitMode ? 'flex' : 'none';
+    confirmBtn.textContent = splitMode ? '이렇게 두 편으로 만들기' : '이 디테일들로 확인';
+    statusEl.textContent = '';
+    statusEl.className = '';
+    applyModeVisuals();
+    if (splitMode) updateSplitCounters(); else updateCounter();
+  });
 
   function showBanner(kind, html) {
     bannerEl.className = 'show ' + kind;
@@ -373,6 +510,36 @@ export function buildCandidatePickerHtml({ painting, candidates, imageFile = 'or
   }
 
   confirmBtn.addEventListener('click', async () => {
+    if (splitMode) {
+      const part1Ids = Object.keys(groupAssignment).filter((id) => groupAssignment[id] === 1);
+      const part2Ids = Object.keys(groupAssignment).filter((id) => groupAssignment[id] === 2);
+      if (part1Ids.length < 2 || part2Ids.length < 2) return;
+      confirmBtn.disabled = true;
+      statusEl.textContent = '';
+      statusEl.className = '';
+      logEl.textContent = '';
+      logEl.classList.remove('show');
+      bannerEl.classList.remove('show');
+      statusEl.textContent = '1부 ' + part1Ids.length + '개, 2부 ' + part2Ids.length + '개로 각각 대본을 작성하는 중... (1부가 끝나면 이 화면이 넘어가고, 2부는 완료되면 새 브라우저 탭이 자동으로 열립니다. 몇 분 걸릴 수 있어요)';
+      try {
+        const res = await fetch('/confirm-candidates-split', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ part1Ids: part1Ids, part2Ids: part2Ids }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || ('요청 실패 (' + res.status + ')'));
+        }
+        // 1부 완료는 /events의 script-ready로, 2부는 새 탭이 알아서 열리는 것으로 확인합니다.
+      } catch (err) {
+        statusEl.textContent = err.message;
+        statusEl.className = 'err';
+        confirmBtn.disabled = false;
+      }
+      return;
+    }
+
     if (selected.size < 2) return;
     confirmBtn.disabled = true;
     statusEl.textContent = '';
