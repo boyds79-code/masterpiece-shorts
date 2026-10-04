@@ -51,3 +51,4 @@
 | 2026-10-02 | The Night Watch | Rembrandt van Rijn | [4KO6c-308Zc](https://studio.youtube.com/video/4KO6c-308Zc/edit) |
 | 2026-10-03 | Napoleon Crossing the Alps | Jacques-Louis David | [OxCeyga8mpE](https://studio.youtube.com/video/OxCeyga8mpE/edit) |
 | 2026-10-03 | Las Meninas | Diego Velázquez | [FWr9IFLaU3k](https://studio.youtube.com/video/FWr9IFLaU3k/edit) |
+| 2026-10-04 | The Kiss | Francesco Hayez | [7eYwCpSJdWw](https://studio.youtube.com/video/7eYwCpSJdWw/edit) |
