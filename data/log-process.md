@@ -53,3 +53,4 @@
 | 2026-10-03 | Las Meninas | Diego Velázquez | [FWr9IFLaU3k](https://studio.youtube.com/video/FWr9IFLaU3k/edit) |
 | 2026-10-04 | The Kiss | Francesco Hayez | [7eYwCpSJdWw](https://studio.youtube.com/video/7eYwCpSJdWw/edit) |
 | 2026-10-05 | The Arnolfini Portrait | Jan van Eyck | [Yb3of7vK0q0](https://studio.youtube.com/video/Yb3of7vK0q0/edit) |
+| 2026-10-06 | Liberty Leading the People | Eugène Delacroix | [G_W0SX9ACyI](https://studio.youtube.com/video/G_W0SX9ACyI/edit) |
